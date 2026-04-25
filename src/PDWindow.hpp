@@ -3,6 +3,8 @@
 #include <thread>
 #include <mutex>
 #include <condition_variable>
+#include <vector>
+#include <cstdint>
 
 struct PDWindow {
 	std::atomic<bool> running{false};
@@ -15,6 +17,12 @@ struct PDWindow {
 	std::mutex readyMutex;
 	std::condition_variable readyCv;
 	bool viewReady = false;
+
+	std::mutex pixelMutex;
+	std::vector<uint8_t> pixels;
+	int pixelW = 1920;
+	int pixelH = 1080;
+	bool pixelsDirty = false;
 
 	void open();
 	void close();

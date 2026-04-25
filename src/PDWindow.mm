@@ -1,5 +1,6 @@
 #define GL_SILENCE_DEPRECATION
 #import <Cocoa/Cocoa.h>
+#include <OpenGL/gl.h>
 #include <libprojectM/projectM.hpp>
 #include "PDWindow.hpp"
 #include <mutex>
@@ -12,13 +13,14 @@
 @end
 
 void PDWindow::open() {
+	pixels.resize(pixelW * pixelH * 4, 0);
+
 	dispatch_async(dispatch_get_main_queue(), ^{
-		NSRect frame = [[NSScreen mainScreen] frame];
+		NSRect frame = NSMakeRect(0, 0, pixelW, pixelH);
 		NSWindow* w = [[NSWindow alloc]
 			initWithContentRect:frame
-			styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskResizable|NSWindowStyleMaskClosable
+			styleMask:NSWindowStyleMaskBorderless
 			backing:NSBackingStoreBuffered defer:NO];
-		[w setTitle:@"Pure Dreams"];
 
 		NSOpenGLPixelFormatAttribute attrs[] = {
 			NSOpenGLPFAOpenGLProfile, NSOpenGLProfileVersion3_2Core,
@@ -28,15 +30,14 @@ void PDWindow::open() {
 		NSOpenGLPixelFormat* fmt = [[NSOpenGLPixelFormat alloc] initWithAttributes:attrs];
 		PDGLView* v = [[PDGLView alloc] initWithFrame:frame pixelFormat:fmt];
 		[w setContentView:v];
-		[w setLevel:NSNormalWindowLevel - 1];
-		[w makeKeyAndOrderFront:nil];
-		NSWindow* main = [NSApp mainWindow];
-		if (main) [w orderWindow:NSWindowBelow relativeTo:main.windowNumber];
+		[v prepareOpenGL];
+
+		// keep window hidden — we only need the GL context
+		[w setAlphaValue:0.0];
+		[w orderFront:nil];
 
 		win  = (__bridge void*)w;
 		view = (__bridge void*)v;
-
-		[v prepareOpenGL];
 
 		{
 			std::lock_guard<std::mutex> lock(readyMutex);
@@ -53,15 +54,8 @@ void PDWindow::close() {
 	running = false;
 	if (renderThread.joinable()) renderThread.join();
 	dispatch_async(dispatch_get_main_queue(), ^{
-		if (win) {
-			NSWindow* w = (__bridge NSWindow*)win;
-			[w close];
-			win = nullptr;
-		}
-		if (view) {
-			(void)(__bridge PDGLView*)view;
-			view = nullptr;
-		}
+		if (win) { [(__bridge NSWindow*)win close]; win = nullptr; }
+		view = nullptr;
 	});
 }
 
@@ -75,17 +69,24 @@ void PDWindow::loop() {
 	NSOpenGLContext* ctx = [v openGLContext];
 	[ctx makeCurrentContext];
 
-	NSRect r = [v frame];
 	projectM::Settings s;
-	s.windowWidth  = (int)r.size.width;
-	s.windowHeight = (int)r.size.height;
+	s.windowWidth  = pixelW;
+	s.windowHeight = pixelH;
 	s.fps = 60; s.meshX = 32; s.meshY = 24;
 	projectM* pm = new projectM(s);
 
 	while (running) {
 		if (requestNext.exchange(false)) pm->selectNext(true);
 		if (requestPrev.exchange(false)) pm->selectPrevious(true);
+
 		pm->renderFrame();
+
+		{
+			std::lock_guard<std::mutex> lock(pixelMutex);
+			glReadPixels(0, 0, pixelW, pixelH, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+			pixelsDirty = true;
+		}
+
 		[ctx flushBuffer];
 	}
 
