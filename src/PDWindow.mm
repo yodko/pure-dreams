@@ -2,6 +2,8 @@
 #import <Cocoa/Cocoa.h>
 #include <libprojectM/projectM.hpp>
 #include "PDWindow.hpp"
+#include <mutex>
+#include <condition_variable>
 
 @interface PDGLView : NSOpenGLView
 @end
@@ -27,10 +29,20 @@ void PDWindow::open() {
 		PDGLView* v = [[PDGLView alloc] initWithFrame:frame pixelFormat:fmt];
 		[w setContentView:v];
 		[w setLevel:NSNormalWindowLevel - 1];
-		[w orderBack:nil];
+		[w makeKeyAndOrderFront:nil];
+		NSWindow* main = [NSApp mainWindow];
+		if (main) [w orderWindow:NSWindowBelow relativeTo:main.windowNumber];
 
 		win  = (__bridge void*)w;
 		view = (__bridge void*)v;
+
+		[v prepareOpenGL];
+
+		{
+			std::lock_guard<std::mutex> lock(readyMutex);
+			viewReady = true;
+		}
+		readyCv.notify_one();
 
 		running = true;
 		renderThread = std::thread([this]() { loop(); });
@@ -54,6 +66,11 @@ void PDWindow::close() {
 }
 
 void PDWindow::loop() {
+	{
+		std::unique_lock<std::mutex> lock(readyMutex);
+		readyCv.wait(lock, [this]{ return viewReady; });
+	}
+
 	PDGLView* v = (__bridge PDGLView*)view;
 	NSOpenGLContext* ctx = [v openGLContext];
 	[ctx makeCurrentContext];

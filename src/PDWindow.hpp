@@ -1,6 +1,8 @@
 #pragma once
 #include <atomic>
 #include <thread>
+#include <mutex>
+#include <condition_variable>
 
 struct PDWindow {
 	std::atomic<bool> running{false};
@@ -9,6 +11,10 @@ struct PDWindow {
 	std::thread renderThread;
 	void* win  = nullptr;
 	void* view = nullptr;
+
+	std::mutex readyMutex;
+	std::condition_variable readyCv;
+	bool viewReady = false;
 
 	void open();
 	void close();
