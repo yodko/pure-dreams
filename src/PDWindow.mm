@@ -14,6 +14,9 @@
 
 void PDWindow::open() {
 	dispatch_async(dispatch_get_main_queue(), ^{
+		// If close() was called before this block ran, bail out
+		if (!wantOpen) return;
+
 		NSScreen* screen = [NSScreen mainScreen];
 		NSRect frame = [screen frame];
 
@@ -58,7 +61,16 @@ void PDWindow::open() {
 }
 
 void PDWindow::close() {
-	running = false;
+	wantOpen = false;
+	running  = false;
+
+	// Unblock loop() if it's waiting for viewReady
+	{
+		std::lock_guard<std::mutex> lock(readyMutex);
+		viewReady = true;
+	}
+	readyCv.notify_all();
+
 	if (renderThread.joinable()) renderThread.join();
 
 	void* w = win;
@@ -77,6 +89,8 @@ void PDWindow::loop() {
 		std::unique_lock<std::mutex> lock(readyMutex);
 		readyCv.wait(lock, [this]{ return viewReady; });
 	}
+
+	if (!running) return;  // closed before view was ready
 
 	PDGLView* v = (__bridge PDGLView*)view;
 	NSOpenGLContext* ctx = [v openGLContext];

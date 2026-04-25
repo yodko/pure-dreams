@@ -5,6 +5,7 @@
 #include <condition_variable>
 
 struct PDWindow {
+	std::atomic<bool> wantOpen{true};
 	std::atomic<bool> running{false};
 	std::atomic<bool> requestNext{false};
 	std::atomic<bool> requestPrev{false};
