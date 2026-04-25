@@ -6,8 +6,7 @@
 #include "PDWindow.hpp"
 #include <mutex>
 #include <condition_variable>
-
-// ── Offscreen GL view ────────────────────────────────────────────────────────
+#include <algorithm>
 
 @interface PDGLView : NSOpenGLView
 @end
@@ -15,10 +14,13 @@
 - (BOOL)acceptsFirstResponder { return NO; }
 @end
 
-// ── Display view (CALayer backed, supports proper transparency) ──────────────
-
-@interface PDDisplayView : NSView
+// CADisplayLink-driven view — pulls from pixel buffer on main thread
+@interface PDDisplayView : NSView {
+	CADisplayLink* _link;
+}
 @property (assign) PDWindow* pdWindow;
+- (void)startLink;
+- (void)stopLink;
 @end
 
 @implementation PDDisplayView
@@ -30,37 +32,40 @@
 	return self;
 }
 - (BOOL)isOpaque { return NO; }
-- (void)updateFromPixels {
+
+- (void)startLink {
+	_link = [CADisplayLink displayLinkWithTarget:self selector:@selector(tick:)];
+	[_link addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
+}
+- (void)stopLink {
+	[_link invalidate];
+	_link = nil;
+	_pdWindow = nullptr;
+}
+- (void)tick:(CADisplayLink*)sender {
 	PDWindow* pw = _pdWindow;
 	if (!pw) return;
 	std::lock_guard<std::mutex> lock(pw->pixelMutex);
-	if (pw->pixels.empty() || !pw->pixelsDirty) return;
+	if (!pw->pixelsDirty || pw->pixels.empty()) return;
 	pw->pixelsDirty = false;
 
 	int w = pw->pixelW, h = pw->pixelH;
 	CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
-	// Use premultiplied alpha so transparent pixels composite correctly
 	CGContextRef ctx = CGBitmapContextCreate(
-		pw->pixels.data(), w, h, 8, w * 4, cs,
+		pw->pixels.data(), w, h, 8, w*4, cs,
 		kCGBitmapByteOrderDefault | kCGImageAlphaPremultipliedLast);
 	CGColorSpaceRelease(cs);
 	if (!ctx) return;
-
 	CGImageRef img = CGBitmapContextCreateImage(ctx);
 	CGContextRelease(ctx);
 
-	// Flip Y (GL has origin at bottom-left, Core Graphics at top-left)
 	CALayer* layer = self.layer;
-	layer.contentsGravity = kCAGravityResizeAspectFill;
+	layer.contentsGravity = kCAGravityResize;
+	layer.transform = CATransform3DMakeScale(1, -1, 1); // Y-flip
 	layer.contents = (__bridge id)img;
-	layer.contentsRect = CGRectMake(0, 0, 1, 1);
-	// Apply Y-flip transform on the layer
-	layer.transform = CATransform3DMakeScale(1, -1, 1);
 	CGImageRelease(img);
 }
 @end
-
-// ── PDWindow ─────────────────────────────────────────────────────────────────
 
 void PDWindow::open() {
 	pixels.resize(pixelW * pixelH * 4, 0);
@@ -71,13 +76,12 @@ void PDWindow::open() {
 		NSScreen* screen = [NSScreen mainScreen];
 		NSRect screenFrame = [screen frame];
 
-		// --- Offscreen render window (tiny, off-screen) ---
-		NSRect tiny = NSMakeRect(-pixelW - 10, -pixelH - 10, pixelW, pixelH);
+		// Offscreen render window
+		NSRect tiny = NSMakeRect(-pixelW-10, -pixelH-10, pixelW, pixelH);
 		NSWindow* rw = [[NSWindow alloc]
 			initWithContentRect:tiny
 			styleMask:NSWindowStyleMaskBorderless
 			backing:NSBackingStoreBuffered defer:NO];
-
 		NSOpenGLPixelFormatAttribute attrs[] = {
 			NSOpenGLPFAOpenGLProfile, NSOpenGLProfileVersion3_2Core,
 			NSOpenGLPFAColorSize, 24, NSOpenGLPFADepthSize, 16,
@@ -88,11 +92,10 @@ void PDWindow::open() {
 		[rw setContentView:rv];
 		[rv prepareOpenGL];
 		[rw orderFront:nil];
-
 		renderWin  = (__bridge void*)rw;
 		renderView = (__bridge void*)rv;
 
-		// --- Display window (fullscreen, transparent, NSFloatingWindowLevel) ---
+		// Display window (floating, transparent, mouse pass-through)
 		NSWindow* dw = [[NSWindow alloc]
 			initWithContentRect:screenFrame
 			styleMask:NSWindowStyleMaskBorderless
@@ -104,12 +107,11 @@ void PDWindow::open() {
 		[dw setCollectionBehavior:
 			NSWindowCollectionBehaviorCanJoinAllSpaces |
 			NSWindowCollectionBehaviorStationary];
-
 		PDDisplayView* dv = [[PDDisplayView alloc]
 			initWithFrame:screenFrame pdWindow:this];
 		[dw setContentView:dv];
 		[dw orderFront:nil];
-
+		[dv startLink];
 		displayWin  = (__bridge void*)dw;
 		displayView = (__bridge void*)dv;
 
@@ -126,7 +128,6 @@ void PDWindow::open() {
 			viewReady = true;
 		}
 		readyCv.notify_one();
-
 		running = true;
 		renderThread = std::thread([this]() { loop(); });
 	});
@@ -140,11 +141,16 @@ void PDWindow::close() {
 		viewReady = true;
 	}
 	readyCv.notify_all();
+
+	// Stop display link on main thread (we ARE on main thread from destructor)
+	if (displayView) {
+		[(__bridge PDDisplayView*)displayView stopLink];
+	}
+
 	if (renderThread.joinable()) renderThread.join();
 
-	void* rw = renderWin,  *dw = displayWin;
+	void* rw = renderWin, *dw = displayWin;
 	renderWin = renderView = displayWin = displayView = nullptr;
-
 	if (rw || dw) {
 		dispatch_async(dispatch_get_main_queue(), ^{
 			if (rw) [(__bridge NSWindow*)rw close];
@@ -174,7 +180,7 @@ void PDWindow::loop() {
 	std::atomic<float>* arx = &rackX, *ary = &rackY, *arw = &rackW, *arh = &rackH;
 
 	while (running) {
-		// Refresh rack frame once per second
+		// Refresh rack frame once per second from main thread
 		if (++frameCount % 60 == 0) {
 			dispatch_async(dispatch_get_main_queue(), ^{
 				NSWindow* rack = [NSApp mainWindow];
@@ -191,40 +197,22 @@ void PDWindow::loop() {
 
 		pm->renderFrame();
 
-		// Read pixels and zero out the VCV Rack area
 		{
 			std::lock_guard<std::mutex> lock(pixelMutex);
 			glReadPixels(0, 0, pixelW, pixelH, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
 
-			// Zero (transparent) the rack window area in the pixel buffer
-			float rx = rackX, ry = rackY, rw2 = rackW, rh2 = rackH;
-			// Convert screen coords (bottom-left) to pixel buffer coords
-			// pixelH = screenH logically, so y maps directly
-			int x0 = (int)rx, y0 = (int)ry;
-			int x1 = x0 + (int)rw2, y1 = y0 + (int)rh2;
-			x0 = std::max(0, x0); y0 = std::max(0, y0);
-			x1 = std::min(pixelW, x1); y1 = std::min(pixelH, y1);
+			// Zero (transparent) the VCV Rack window area
+			int x0 = std::max(0, (int)rackX.load());
+			int y0 = std::max(0, (int)rackY.load());
+			int x1 = std::min(pixelW, x0 + (int)rackW.load());
+			int y1 = std::min(pixelH, y0 + (int)rackH.load());
 			for (int y = y0; y < y1; y++) {
-				int row = y * pixelW * 4;
-				for (int x = x0; x < x1; x++) {
-					pixels[row + x*4 + 0] = 0;
-					pixels[row + x*4 + 1] = 0;
-					pixels[row + x*4 + 2] = 0;
-					pixels[row + x*4 + 3] = 0;
-				}
+				memset(pixels.data() + y * pixelW * 4 + x0 * 4, 0, (x1 - x0) * 4);
 			}
 			pixelsDirty = true;
 		}
 
 		[ctx flushBuffer];
-
-		// Update display on main thread
-		void* dv = displayView;
-		if (dv) {
-			dispatch_async(dispatch_get_main_queue(), ^{
-				[(__bridge PDDisplayView*)dv updateFromPixels];
-			});
-		}
 	}
 
 	delete pm;
