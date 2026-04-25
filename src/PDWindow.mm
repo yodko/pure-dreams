@@ -11,7 +11,7 @@
 
 void PDWindow::open() {
 	dispatch_async(dispatch_get_main_queue(), ^{
-		NSRect frame = NSMakeRect(100, 100, 1280, 720);
+		NSRect frame = [[NSScreen mainScreen] frame];
 		NSWindow* w = [[NSWindow alloc]
 			initWithContentRect:frame
 			styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskResizable|NSWindowStyleMaskClosable
@@ -26,7 +26,8 @@ void PDWindow::open() {
 		NSOpenGLPixelFormat* fmt = [[NSOpenGLPixelFormat alloc] initWithAttributes:attrs];
 		PDGLView* v = [[PDGLView alloc] initWithFrame:frame pixelFormat:fmt];
 		[w setContentView:v];
-		[w makeKeyAndOrderFront:nil];
+		[w setLevel:NSNormalWindowLevel - 1];
+		[w orderBack:nil];
 
 		win  = (__bridge void*)w;
 		view = (__bridge void*)v;
