@@ -9,18 +9,24 @@
 @interface PDGLView : NSOpenGLView
 @end
 @implementation PDGLView
-- (BOOL)acceptsFirstResponder { return YES; }
+- (BOOL)acceptsFirstResponder { return NO; }
 @end
 
 void PDWindow::open() {
-	pixels.resize(pixelW * pixelH * 4, 0);
-
 	dispatch_async(dispatch_get_main_queue(), ^{
-		NSRect frame = NSMakeRect(0, 0, pixelW, pixelH);
+		NSScreen* screen = [NSScreen mainScreen];
+		NSRect frame = [screen frame];
+
 		NSWindow* w = [[NSWindow alloc]
 			initWithContentRect:frame
 			styleMask:NSWindowStyleMaskBorderless
 			backing:NSBackingStoreBuffered defer:NO];
+
+		[w setLevel:NSNormalWindowLevel - 1];
+		[w setIgnoresMouseEvents:YES];
+		[w setCollectionBehavior:
+			NSWindowCollectionBehaviorCanJoinAllSpaces |
+			NSWindowCollectionBehaviorStationary];
 
 		NSOpenGLPixelFormatAttribute attrs[] = {
 			NSOpenGLPFAOpenGLProfile, NSOpenGLProfileVersion3_2Core,
@@ -31,10 +37,11 @@ void PDWindow::open() {
 		PDGLView* v = [[PDGLView alloc] initWithFrame:frame pixelFormat:fmt];
 		[w setContentView:v];
 		[v prepareOpenGL];
-
-		// Move off-screen so macOS allocates a real render surface
-		[w setFrameOrigin:NSMakePoint(-pixelW - 10, -pixelH - 10)];
 		[w makeKeyAndOrderFront:nil];
+
+		// Put behind VCV Rack's window
+		NSWindow* rack = [NSApp mainWindow];
+		if (rack) [w orderWindow:NSWindowBelow relativeTo:rack.windowNumber];
 
 		win  = (__bridge void*)w;
 		view = (__bridge void*)v;
@@ -54,8 +61,6 @@ void PDWindow::close() {
 	running = false;
 	if (renderThread.joinable()) renderThread.join();
 
-	// Capture raw pointer by value before dispatch — PDWindow may be
-	// deleted before the block executes, so we must not touch members.
 	void* w = win;
 	win  = nullptr;
 	view = nullptr;
@@ -77,24 +82,17 @@ void PDWindow::loop() {
 	NSOpenGLContext* ctx = [v openGLContext];
 	[ctx makeCurrentContext];
 
+	NSRect frame = [v frame];
 	projectM::Settings s;
-	s.windowWidth  = pixelW;
-	s.windowHeight = pixelH;
+	s.windowWidth  = (int)frame.size.width;
+	s.windowHeight = (int)frame.size.height;
 	s.fps = 60; s.meshX = 32; s.meshY = 24;
 	projectM* pm = new projectM(s);
 
 	while (running) {
 		if (requestNext.exchange(false)) pm->selectNext(true);
 		if (requestPrev.exchange(false)) pm->selectPrevious(true);
-
 		pm->renderFrame();
-
-		{
-			std::lock_guard<std::mutex> lock(pixelMutex);
-			glReadPixels(0, 0, pixelW, pixelH, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
-			pixelsDirty = true;
-		}
-
 		[ctx flushBuffer];
 	}
 
