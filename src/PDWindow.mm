@@ -53,10 +53,18 @@ void PDWindow::open() {
 void PDWindow::close() {
 	running = false;
 	if (renderThread.joinable()) renderThread.join();
-	dispatch_async(dispatch_get_main_queue(), ^{
-		if (win) { [(__bridge NSWindow*)win close]; win = nullptr; }
-		view = nullptr;
-	});
+
+	// Capture raw pointer by value before dispatch — PDWindow may be
+	// deleted before the block executes, so we must not touch members.
+	void* w = win;
+	win  = nullptr;
+	view = nullptr;
+
+	if (w) {
+		dispatch_async(dispatch_get_main_queue(), ^{
+			[(__bridge NSWindow*)w close];
+		});
+	}
 }
 
 void PDWindow::loop() {
