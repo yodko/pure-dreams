@@ -34,15 +34,15 @@
 - (BOOL)isOpaque { return NO; }
 
 - (void)startLink {
-	_link = [CADisplayLink displayLinkWithTarget:self selector:@selector(tick:)];
-	[_link addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
+	_timer = [NSTimer scheduledTimerWithTimeInterval:1.0/60.0 target:self selector:@selector(tick:) userInfo:nil repeats:YES];
+	
 }
 - (void)stopLink {
-	[_link invalidate];
-	_link = nil;
+	[_timer invalidate];
+	_timer = nil;
 	_pdWindow = nullptr;
 }
-- (void)tick:(CADisplayLink*)sender {
+- (void)tick:(NSTimer*)sender {
 	PDWindow* pw = _pdWindow;
 	if (!pw) return;
 	std::lock_guard<std::mutex> lock(pw->pixelMutex);
