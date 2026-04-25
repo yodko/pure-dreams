@@ -14,7 +14,6 @@
 
 void PDWindow::open() {
 	dispatch_async(dispatch_get_main_queue(), ^{
-		// If close() was called before this block ran, bail out
 		if (!wantOpen) return;
 
 		NSScreen* screen = [NSScreen mainScreen];
@@ -25,26 +24,37 @@ void PDWindow::open() {
 			styleMask:NSWindowStyleMaskBorderless
 			backing:NSBackingStoreBuffered defer:NO];
 
-		[w setLevel:NSNormalWindowLevel];
+		[w setLevel:NSFloatingWindowLevel];
 		[w setIgnoresMouseEvents:YES];
+		[w setOpaque:NO];
+		[w setBackgroundColor:[NSColor clearColor]];
 		[w setCollectionBehavior:
 			NSWindowCollectionBehaviorCanJoinAllSpaces |
 			NSWindowCollectionBehaviorStationary];
 
 		NSOpenGLPixelFormatAttribute attrs[] = {
 			NSOpenGLPFAOpenGLProfile, NSOpenGLProfileVersion3_2Core,
-			NSOpenGLPFAColorSize, 24, NSOpenGLPFADepthSize, 16,
+			NSOpenGLPFAColorSize, 24,
+			NSOpenGLPFAAlphaSize,  8,
+			NSOpenGLPFADepthSize, 16,
 			NSOpenGLPFADoubleBuffer, NSOpenGLPFAAccelerated, 0
 		};
 		NSOpenGLPixelFormat* fmt = [[NSOpenGLPixelFormat alloc] initWithAttributes:attrs];
 		PDGLView* v = [[PDGLView alloc] initWithFrame:frame pixelFormat:fmt];
+		[v setWantsBestResolutionOpenGLSurface:NO];
 		[w setContentView:v];
 		[v prepareOpenGL];
 		[w orderFront:nil];
 
-		// Bring VCV Rack back to front so it sits above our window
+		// Cache VCV Rack's window frame immediately
 		NSWindow* rack = [NSApp mainWindow];
-		if (rack) [rack makeKeyAndOrderFront:nil];
+		if (rack) {
+			NSRect f = rack.frame;
+			rackX = f.origin.x;
+			rackY = f.origin.y;
+			rackW = f.size.width;
+			rackH = f.size.height;
+		}
 
 		win  = (__bridge void*)w;
 		view = (__bridge void*)v;
@@ -64,7 +74,6 @@ void PDWindow::close() {
 	wantOpen = false;
 	running  = false;
 
-	// Unblock loop() if it's waiting for viewReady
 	{
 		std::lock_guard<std::mutex> lock(readyMutex);
 		viewReady = true;
@@ -89,24 +98,55 @@ void PDWindow::loop() {
 		std::unique_lock<std::mutex> lock(readyMutex);
 		readyCv.wait(lock, [this]{ return viewReady; });
 	}
-
-	if (!running) return;  // closed before view was ready
+	if (!running) return;
 
 	PDGLView* v = (__bridge PDGLView*)view;
 	NSOpenGLContext* ctx = [v openGLContext];
 	[ctx makeCurrentContext];
 
 	NSRect frame = [v frame];
+	int screenW = (int)frame.size.width;
+	int screenH = (int)frame.size.height;
+
 	projectM::Settings s;
-	s.windowWidth  = (int)frame.size.width;
-	s.windowHeight = (int)frame.size.height;
+	s.windowWidth  = screenW;
+	s.windowHeight = screenH;
 	s.fps = 60; s.meshX = 32; s.meshY = 24;
 	projectM* pm = new projectM(s);
 
+	int frameCount = 0;
+	std::atomic<float>* arx = &rackX, *ary = &rackY, *arw = &rackW, *arh = &rackH;
+
 	while (running) {
+		// Refresh rack window frame once per second from main thread
+		if (++frameCount % 60 == 0) {
+			dispatch_async(dispatch_get_main_queue(), ^{
+				NSWindow* rack = [NSApp mainWindow];
+				if (rack) {
+					NSRect f = rack.frame;
+					*arx = f.origin.x;
+					*ary = f.origin.y;
+					*arw = f.size.width;
+					*arh = f.size.height;
+				}
+			});
+		}
+
 		if (requestNext.exchange(false)) pm->selectNext(true);
 		if (requestPrev.exchange(false)) pm->selectPrevious(true);
+
 		pm->renderFrame();
+
+		// Punch a transparent hole where VCV Rack's window sits
+		float rx = rackX, ry = rackY, rw = rackW, rh = rackH;
+		if (rw > 0 && rh > 0) {
+			glEnable(GL_SCISSOR_TEST);
+			glScissor((int)rx, (int)ry, (int)rw, (int)rh);
+			glClearColor(0.f, 0.f, 0.f, 0.f);
+			glClear(GL_COLOR_BUFFER_BIT);
+			glDisable(GL_SCISSOR_TEST);
+		}
+
 		[ctx flushBuffer];
 	}
 

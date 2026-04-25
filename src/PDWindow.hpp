@@ -17,6 +17,9 @@ struct PDWindow {
 	std::condition_variable readyCv;
 	bool viewReady = false;
 
+	// Cached VCV Rack window frame (screen coords, bottom-left origin)
+	std::atomic<float> rackX{0}, rackY{0}, rackW{0}, rackH{0};
+
 	void open();
 	void close();
 	void loop();
