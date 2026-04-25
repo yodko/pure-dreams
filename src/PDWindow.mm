@@ -25,7 +25,7 @@ void PDWindow::open() {
 			styleMask:NSWindowStyleMaskBorderless
 			backing:NSBackingStoreBuffered defer:NO];
 
-		[w setLevel:NSNormalWindowLevel - 1];
+		[w setLevel:NSNormalWindowLevel];
 		[w setIgnoresMouseEvents:YES];
 		[w setCollectionBehavior:
 			NSWindowCollectionBehaviorCanJoinAllSpaces |
@@ -40,11 +40,14 @@ void PDWindow::open() {
 		PDGLView* v = [[PDGLView alloc] initWithFrame:frame pixelFormat:fmt];
 		[w setContentView:v];
 		[v prepareOpenGL];
-		[w makeKeyAndOrderFront:nil];
+		[w orderFront:nil];
 
-		// Put behind VCV Rack's window
+		// Slide behind VCV Rack's window
 		NSWindow* rack = [NSApp mainWindow];
-		if (rack) [w orderWindow:NSWindowBelow relativeTo:rack.windowNumber];
+		if (rack)
+			[w orderWindow:NSWindowBelow relativeTo:rack.windowNumber];
+		else
+			[w orderBack:nil];
 
 		win  = (__bridge void*)w;
 		view = (__bridge void*)v;
