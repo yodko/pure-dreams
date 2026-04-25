@@ -4,11 +4,7 @@
 #include <atomic>
 #include <vector>
 
-// Forward declarations for libprojectM (linked at build time)
-// We use the projectM 4.x C API
-extern "C" {
-#include <projectM-4/projectM.h>
-}
+#include <libprojectM/projectM.hpp>
 
 static const int PANEL_HP = 128; // width in HP — covers a full standard rack row
 
@@ -61,7 +57,7 @@ struct ProjectMRenderer {
 	int height = 720;
 	std::vector<uint8_t> pixels; // RGBA, width*height*4
 
-	projectm_handle pm = nullptr;
+	projectM* pm = nullptr;
 
 	void start() {
 		pixels.resize(width * height * 4, 0);
@@ -76,45 +72,38 @@ struct ProjectMRenderer {
 	}
 
 	void loop() {
-		// TODO: create an offscreen OpenGL context here (platform-specific)
-		// For macOS: NSOpenGLContext or CGLContext
-		// This is the main integration point — stubbed for now.
-
-		projectm_settings* settings = projectm_alloc_settings();
-		settings->window_width  = width;
-		settings->window_height = height;
-		settings->fps           = 60;
-		settings->mesh_x        = 32;
-		settings->mesh_y        = 24;
-		pm = projectm_create_settings(settings, 0);
-		projectm_free_settings(settings);
+		projectM::Settings s;
+		s.windowWidth  = width;
+		s.windowHeight = height;
+		s.fps          = 60;
+		s.meshX        = 32;
+		s.meshY        = 24;
+		pm = new projectM(s);
 
 		if (!pm) return;
 
 		while (running) {
 			if (requestNext.exchange(false))
-				projectm_select_next_preset(pm, true);
+				pm->selectNext(true);
 			if (requestPrev.exchange(false))
-				projectm_select_previous_preset(pm, true);
+				pm->selectPrevious(true);
 
-			projectm_render_frame(pm);
+			pm->renderFrame();
 
-			// Read pixels from the framebuffer
 			{
 				std::lock_guard<std::mutex> lock(bufferMutex);
 				// glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
-				// (Uncommented once GL context is wired up)
 			}
 		}
 
-		projectm_destroy(pm);
+		delete pm;
 		pm = nullptr;
 	}
 
-	void feedAudio(float left, float right, int count) {
+	void feedAudio(float left, float right) {
 		if (!pm) return;
-		float pcm[2] = {left, right};
-		projectm_pcm_add_float(pm, pcm, 1, PROJECTM_STEREO);
+		float pcm[2][2] = {{left, right}, {left, right}};
+		pm->pcm()->addPCMfloat(pcm[0], 2);
 	}
 
 	~ProjectMRenderer() { stop(); }
@@ -224,7 +213,7 @@ struct PureDreamsWidget : ModuleWidget {
 			// Feed audio (normalise ±5V → ±1.0)
 			float L = module->inputs[PureDreams::LEFT_INPUT].getVoltage() / 5.f;
 			float R = module->inputs[PureDreams::RIGHT_INPUT].getVoltage() / 5.f;
-			renderer->feedAudio(L, R, 1);
+			renderer->feedAudio(L, R);
 
 			// Upload latest pixel buffer as NanoVG image
 			// (once GL context is wired up, uncomment below)

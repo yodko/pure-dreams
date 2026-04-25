@@ -7,8 +7,8 @@ DISTRIBUTABLES += res
 DISTRIBUTABLES += $(wildcard LICENSE*)
 DISTRIBUTABLES += $(wildcard presets)
 
-# libprojectM
-CXXFLAGS += -I$(RACK_DIR)/dep/include
-LDFLAGS += -lprojectM-4
+PROJECTM_PREFIX ?= /opt/homebrew/Cellar/projectm/3.1.12
+CXXFLAGS += -I$(PROJECTM_PREFIX)/include
+LDFLAGS += -L$(PROJECTM_PREFIX)/lib -lprojectM
 
 include $(RACK_DIR)/plugin.mk
