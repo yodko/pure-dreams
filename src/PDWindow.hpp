@@ -24,6 +24,9 @@ struct PDWindow {
 	int pixelH = 1080;
 	bool pixelsDirty = false;
 
+	unsigned int fbo = 0;
+	unsigned int fboTex = 0;
+
 	void open();
 	void close();
 	void loop();

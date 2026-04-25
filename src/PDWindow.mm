@@ -69,6 +69,17 @@ void PDWindow::loop() {
 	NSOpenGLContext* ctx = [v openGLContext];
 	[ctx makeCurrentContext];
 
+	// Create FBO so projectM renders into a texture we can read
+	glGenFramebuffers(1, &fbo);
+	glGenTextures(1, &fboTex);
+	glBindTexture(GL_TEXTURE_2D, fboTex);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, pixelW, pixelH, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fboTex, 0);
+	glBindTexture(GL_TEXTURE_2D, 0);
+
 	projectM::Settings s;
 	s.windowWidth  = pixelW;
 	s.windowHeight = pixelH;
@@ -79,6 +90,7 @@ void PDWindow::loop() {
 		if (requestNext.exchange(false)) pm->selectNext(true);
 		if (requestPrev.exchange(false)) pm->selectPrevious(true);
 
+		glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 		pm->renderFrame();
 
 		{
@@ -87,8 +99,11 @@ void PDWindow::loop() {
 			pixelsDirty = true;
 		}
 
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		[ctx flushBuffer];
 	}
 
+	glDeleteFramebuffers(1, &fbo);
+	glDeleteTextures(1, &fboTex);
 	delete pm;
 }

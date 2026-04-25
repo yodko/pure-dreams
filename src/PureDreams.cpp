@@ -50,12 +50,11 @@ struct PureDreamsWidget : ModuleWidget {
 
 			std::lock_guard<std::mutex> lock(pdWin->pixelMutex);
 			if (pdWin->pixelsDirty && !pdWin->pixels.empty()) {
-				if (nvgImage < 0)
-					nvgImage = nvgCreateImageRGBA(APP->window->vg,
-						pdWin->pixelW, pdWin->pixelH,
-						NVG_IMAGE_FLIPY, pdWin->pixels.data());
-				else
-					nvgUpdateImage(APP->window->vg, nvgImage, pdWin->pixels.data());
+				if (nvgImage >= 0)
+					nvgDeleteImage(APP->window->vg, nvgImage);
+				nvgImage = nvgCreateImageRGBA(APP->window->vg,
+					pdWin->pixelW, pdWin->pixelH,
+					0, pdWin->pixels.data());
 				pdWin->pixelsDirty = false;
 			}
 		}
@@ -69,17 +68,18 @@ struct PureDreamsWidget : ModuleWidget {
 			nvgSave(args.vg);
 			nvgResetScissor(args.vg);
 
-			// Our module is at box.pos in rack space.
-			// (-box.pos.x, -box.pos.y) puts us at the rack origin.
 			float rx = -box.pos.x;
 			float ry = -box.pos.y;
 			float rw = 16000.f;
 			float rh = 4000.f;
 
-			NVGpaint paint = nvgImagePattern(
-				args.vg, rx, ry, rw, rh, 0.f, nvgImage, 1.f);
+			// projectM renders upside down — flip via transform
+			nvgTranslate(args.vg, rx, ry + rh);
+			nvgScale(args.vg, 1.f, -1.f);
+
+			NVGpaint paint = nvgImagePattern(args.vg, 0, 0, rw, rh, 0.f, nvgImage, 1.f);
 			nvgBeginPath(args.vg);
-			nvgRect(args.vg, rx, ry, rw, rh);
+			nvgRect(args.vg, 0, 0, rw, rh);
 			nvgFillPaint(args.vg, paint);
 			nvgFill(args.vg);
 
