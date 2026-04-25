@@ -14,13 +14,12 @@
 - (BOOL)acceptsFirstResponder { return NO; }
 @end
 
-// CADisplayLink-driven view — pulls from pixel buffer on main thread
 @interface PDDisplayView : NSView {
-	CADisplayLink* _link;
+	NSTimer* _timer;
 }
 @property (assign) PDWindow* pdWindow;
-- (void)startLink;
-- (void)stopLink;
+- (void)startTimer;
+- (void)stopTimer;
 @end
 
 @implementation PDDisplayView
@@ -32,17 +31,16 @@
 	return self;
 }
 - (BOOL)isOpaque { return NO; }
-
-- (void)startLink {
-	_timer = [NSTimer scheduledTimerWithTimeInterval:1.0/60.0 target:self selector:@selector(tick:) userInfo:nil repeats:YES];
-	
+- (void)startTimer {
+	_timer = [NSTimer scheduledTimerWithTimeInterval:1.0/60.0
+		target:self selector:@selector(tick:) userInfo:nil repeats:YES];
 }
-- (void)stopLink {
+- (void)stopTimer {
 	[_timer invalidate];
 	_timer = nil;
 	_pdWindow = nullptr;
 }
-- (void)tick:(NSTimer*)sender {
+- (void)tick:(NSTimer*)t {
 	PDWindow* pw = _pdWindow;
 	if (!pw) return;
 	std::lock_guard<std::mutex> lock(pw->pixelMutex);
@@ -61,7 +59,7 @@
 
 	CALayer* layer = self.layer;
 	layer.contentsGravity = kCAGravityResize;
-	layer.transform = CATransform3DMakeScale(1, -1, 1); // Y-flip
+	layer.transform = CATransform3DMakeScale(1, -1, 1);
 	layer.contents = (__bridge id)img;
 	CGImageRelease(img);
 }
@@ -95,7 +93,7 @@ void PDWindow::open() {
 		renderWin  = (__bridge void*)rw;
 		renderView = (__bridge void*)rv;
 
-		// Display window (floating, transparent, mouse pass-through)
+		// Display window
 		NSWindow* dw = [[NSWindow alloc]
 			initWithContentRect:screenFrame
 			styleMask:NSWindowStyleMaskBorderless
@@ -111,11 +109,10 @@ void PDWindow::open() {
 			initWithFrame:screenFrame pdWindow:this];
 		[dw setContentView:dv];
 		[dw orderFront:nil];
-		[dv startLink];
+		[dv startTimer];
 		displayWin  = (__bridge void*)dw;
 		displayView = (__bridge void*)dv;
 
-		// Cache rack frame
 		NSWindow* rack = [NSApp mainWindow];
 		if (rack) {
 			NSRect f = rack.frame;
@@ -142,10 +139,8 @@ void PDWindow::close() {
 	}
 	readyCv.notify_all();
 
-	// Stop display link on main thread (we ARE on main thread from destructor)
-	if (displayView) {
-		[(__bridge PDDisplayView*)displayView stopLink];
-	}
+	if (displayView)
+		[(__bridge PDDisplayView*)displayView stopTimer];
 
 	if (renderThread.joinable()) renderThread.join();
 
@@ -180,7 +175,6 @@ void PDWindow::loop() {
 	std::atomic<float>* arx = &rackX, *ary = &rackY, *arw = &rackW, *arh = &rackH;
 
 	while (running) {
-		// Refresh rack frame once per second from main thread
 		if (++frameCount % 60 == 0) {
 			dispatch_async(dispatch_get_main_queue(), ^{
 				NSWindow* rack = [NSApp mainWindow];
@@ -201,14 +195,12 @@ void PDWindow::loop() {
 			std::lock_guard<std::mutex> lock(pixelMutex);
 			glReadPixels(0, 0, pixelW, pixelH, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
 
-			// Zero (transparent) the VCV Rack window area
 			int x0 = std::max(0, (int)rackX.load());
 			int y0 = std::max(0, (int)rackY.load());
 			int x1 = std::min(pixelW, x0 + (int)rackW.load());
 			int y1 = std::min(pixelH, y0 + (int)rackH.load());
-			for (int y = y0; y < y1; y++) {
-				memset(pixels.data() + y * pixelW * 4 + x0 * 4, 0, (x1 - x0) * 4);
-			}
+			for (int y = y0; y < y1; y++)
+				memset(pixels.data() + y*pixelW*4 + x0*4, 0, (x1-x0)*4);
 			pixelsDirty = true;
 		}
 
