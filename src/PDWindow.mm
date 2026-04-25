@@ -42,12 +42,9 @@ void PDWindow::open() {
 		[v prepareOpenGL];
 		[w orderFront:nil];
 
-		// Slide behind VCV Rack's window
+		// Bring VCV Rack back to front so it sits above our window
 		NSWindow* rack = [NSApp mainWindow];
-		if (rack)
-			[w orderWindow:NSWindowBelow relativeTo:rack.windowNumber];
-		else
-			[w orderBack:nil];
+		if (rack) [rack makeKeyAndOrderFront:nil];
 
 		win  = (__bridge void*)w;
 		view = (__bridge void*)v;
