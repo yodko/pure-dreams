@@ -9,6 +9,6 @@ DISTRIBUTABLES += $(wildcard presets)
 
 PROJECTM_PREFIX ?= /opt/homebrew/Cellar/projectm/3.1.12
 CXXFLAGS += -I$(PROJECTM_PREFIX)/include
-LDFLAGS += -L$(PROJECTM_PREFIX)/lib -lprojectM
+LDFLAGS += -L$(PROJECTM_PREFIX)/lib -lprojectM -framework OpenGL
 
 include $(RACK_DIR)/plugin.mk

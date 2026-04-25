@@ -5,6 +5,8 @@
 #include <vector>
 
 #include <libprojectM/projectM.hpp>
+#include <OpenGL/OpenGL.h>
+#include <OpenGL/gl.h>
 
 static const int PANEL_HP = 128; // width in HP — covers a full standard rack row
 
@@ -71,7 +73,28 @@ struct ProjectMRenderer {
 			renderThread.join();
 	}
 
+	CGLContextObj createContext() {
+		CGLPixelFormatAttribute attrs[] = {
+			kCGLPFAAccelerated,
+			kCGLPFAColorSize,   (CGLPixelFormatAttribute)24,
+			kCGLPFADepthSize,   (CGLPixelFormatAttribute)16,
+			kCGLPFAOpenGLProfile, (CGLPixelFormatAttribute)kCGLOGLPVersion_3_2_Core,
+			(CGLPixelFormatAttribute)0
+		};
+		CGLPixelFormatObj pix;
+		GLint num;
+		CGLChoosePixelFormat(attrs, &pix, &num);
+		CGLContextObj ctx;
+		CGLCreateContext(pix, nullptr, &ctx);
+		CGLDestroyPixelFormat(pix);
+		return ctx;
+	}
+
 	void loop() {
+		CGLContextObj ctx = createContext();
+		if (!ctx) return;
+		CGLSetCurrentContext(ctx);
+
 		projectM::Settings s;
 		s.windowWidth  = width;
 		s.windowHeight = height;
@@ -98,6 +121,8 @@ struct ProjectMRenderer {
 
 		delete pm;
 		pm = nullptr;
+		CGLSetCurrentContext(nullptr);
+		CGLDestroyContext(ctx);
 	}
 
 	void feedAudio(float left, float right) {
