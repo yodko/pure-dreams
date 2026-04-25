@@ -1,5 +1,50 @@
 #include "plugin.hpp"
 #include "PDWindow.hpp"
+#include <mutex>
+#include <list>
+
+// Draws projectM pixels as background, injected directly into RackWidget
+// before ModuleContainer so it renders behind all modules.
+struct RackBgWidget : widget::Widget {
+	PDWindow* pdWin;
+	int nvgImg = -1;
+
+	RackBgWidget(PDWindow* w) : pdWin(w) {
+		box.pos  = Vec(0, 0);
+		box.size = APP->scene->rack->box.size;
+	}
+
+	void step() override {
+		box.size = APP->scene->rack->box.size;
+		widget::Widget::step();
+	}
+
+	void draw(const DrawArgs& args) override {
+		if (!pdWin || pdWin->pixels.empty()) return;
+
+		{
+			std::lock_guard<std::mutex> lock(pdWin->pixelMutex);
+			if (pdWin->pixelsDirty) {
+				if (nvgImg >= 0) nvgDeleteImage(args.vg, nvgImg);
+				nvgImg = nvgCreateImageRGBA(args.vg,
+					pdWin->pixelW, pdWin->pixelH, 0, pdWin->pixels.data());
+				pdWin->pixelsDirty = false;
+			}
+		}
+		if (nvgImg < 0) return;
+
+		float w = box.size.x, h = box.size.y;
+		nvgSave(args.vg);
+		nvgTranslate(args.vg, 0, h);
+		nvgScale(args.vg, 1.f, -1.f);
+		NVGpaint p = nvgImagePattern(args.vg, 0, 0, w, h, 0.f, nvgImg, 1.f);
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, 0, 0, w, h);
+		nvgFillPaint(args.vg, p);
+		nvgFill(args.vg);
+		nvgRestore(args.vg);
+	}
+};
 
 struct PureDreams : Module {
 	enum ParamId  { PREV_PARAM, NEXT_PARAM, PARAMS_LEN };
@@ -16,17 +61,39 @@ struct PureDreams : Module {
 
 struct PureDreamsWidget : ModuleWidget {
 	PDWindow* pdWin = nullptr;
+	RackBgWidget* rackBg = nullptr;
 
 	PureDreamsWidget(PureDreams* module) {
 		setModule(module);
 		box.size = Vec(2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT);
-		if (module) { pdWin = new PDWindow(); pdWin->open(); }
+
+		if (module) {
+			pdWin = new PDWindow();
+			pdWin->open();
+
+			rackBg = new RackBgWidget(pdWin);
+
+			// Insert at position 1: after RailWidget, before ModuleContainer
+			// This makes it draw before all modules.
+			auto& children = APP->scene->rack->children;
+			auto it = children.begin();
+			if (!children.empty()) std::advance(it, 1);
+			children.insert(it, rackBg);
+			rackBg->parent = APP->scene->rack;
+		}
+
 		float cx = box.size.x / 2.f;
-		addParam(createParamCentered<VCVBezel>(Vec(cx, RACK_GRID_HEIGHT/2.f - 30.f), module, PureDreams::PREV_PARAM));
-		addParam(createParamCentered<VCVBezel>(Vec(cx, RACK_GRID_HEIGHT/2.f + 30.f), module, PureDreams::NEXT_PARAM));
+		addParam(createParamCentered<VCVBezel>(
+			Vec(cx, RACK_GRID_HEIGHT/2.f - 30.f), module, PureDreams::PREV_PARAM));
+		addParam(createParamCentered<VCVBezel>(
+			Vec(cx, RACK_GRID_HEIGHT/2.f + 30.f), module, PureDreams::NEXT_PARAM));
 	}
 
 	~PureDreamsWidget() {
+		if (rackBg) {
+			APP->scene->rack->removeChild(rackBg);
+			delete rackBg;
+		}
 		if (pdWin) { pdWin->close(); delete pdWin; }
 	}
 

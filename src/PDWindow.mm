@@ -1,68 +1,15 @@
 #define GL_SILENCE_DEPRECATION
 #import <Cocoa/Cocoa.h>
-#import <QuartzCore/QuartzCore.h>
 #include <OpenGL/gl.h>
 #include <libprojectM/projectM.hpp>
 #include "PDWindow.hpp"
 #include <mutex>
 #include <condition_variable>
-#include <algorithm>
 
 @interface PDGLView : NSOpenGLView
 @end
 @implementation PDGLView
 - (BOOL)acceptsFirstResponder { return NO; }
-@end
-
-@interface PDDisplayView : NSView {
-	NSTimer* _timer;
-}
-@property (assign) PDWindow* pdWindow;
-- (void)startTimer;
-- (void)stopTimer;
-@end
-
-@implementation PDDisplayView
-- (instancetype)initWithFrame:(NSRect)frame pdWindow:(PDWindow*)win {
-	self = [super initWithFrame:frame];
-	_pdWindow = win;
-	self.wantsLayer = YES;
-	self.layer.opaque = NO;
-	return self;
-}
-- (BOOL)isOpaque { return NO; }
-- (void)startTimer {
-	_timer = [NSTimer scheduledTimerWithTimeInterval:1.0/60.0
-		target:self selector:@selector(tick:) userInfo:nil repeats:YES];
-}
-- (void)stopTimer {
-	[_timer invalidate];
-	_timer = nil;
-	_pdWindow = nullptr;
-}
-- (void)tick:(NSTimer*)t {
-	PDWindow* pw = _pdWindow;
-	if (!pw) return;
-	std::lock_guard<std::mutex> lock(pw->pixelMutex);
-	if (!pw->pixelsDirty || pw->pixels.empty()) return;
-	pw->pixelsDirty = false;
-
-	int w = pw->pixelW, h = pw->pixelH;
-	CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
-	CGContextRef ctx = CGBitmapContextCreate(
-		pw->pixels.data(), w, h, 8, w*4, cs,
-		kCGBitmapByteOrderDefault | kCGImageAlphaPremultipliedLast);
-	CGColorSpaceRelease(cs);
-	if (!ctx) return;
-	CGImageRef img = CGBitmapContextCreateImage(ctx);
-	CGContextRelease(ctx);
-
-	CALayer* layer = self.layer;
-	layer.contentsGravity = kCAGravityResize;
-	layer.transform = CATransform3DMakeScale(1, -1, 1);
-	layer.contents = (__bridge id)img;
-	CGImageRelease(img);
-}
 @end
 
 void PDWindow::open() {
@@ -71,54 +18,26 @@ void PDWindow::open() {
 	dispatch_async(dispatch_get_main_queue(), ^{
 		if (!wantOpen) return;
 
-		NSScreen* screen = [NSScreen mainScreen];
-		NSRect screenFrame = [screen frame];
-
-		// Offscreen render window
-		NSRect tiny = NSMakeRect(-pixelW-10, -pixelH-10, pixelW, pixelH);
-		NSWindow* rw = [[NSWindow alloc]
-			initWithContentRect:tiny
+		// Off-screen window — moved far off screen so macOS allocates a real framebuffer
+		NSRect frame = NSMakeRect(-pixelW - 10, -pixelH - 10, pixelW, pixelH);
+		NSWindow* w = [[NSWindow alloc]
+			initWithContentRect:frame
 			styleMask:NSWindowStyleMaskBorderless
 			backing:NSBackingStoreBuffered defer:NO];
+
 		NSOpenGLPixelFormatAttribute attrs[] = {
 			NSOpenGLPFAOpenGLProfile, NSOpenGLProfileVersion3_2Core,
 			NSOpenGLPFAColorSize, 24, NSOpenGLPFADepthSize, 16,
 			NSOpenGLPFADoubleBuffer, NSOpenGLPFAAccelerated, 0
 		};
 		NSOpenGLPixelFormat* fmt = [[NSOpenGLPixelFormat alloc] initWithAttributes:attrs];
-		PDGLView* rv = [[PDGLView alloc] initWithFrame:tiny pixelFormat:fmt];
-		[rw setContentView:rv];
-		[rv prepareOpenGL];
-		[rw orderFront:nil];
-		renderWin  = (__bridge void*)rw;
-		renderView = (__bridge void*)rv;
+		PDGLView* v = [[PDGLView alloc] initWithFrame:frame pixelFormat:fmt];
+		[w setContentView:v];
+		[v prepareOpenGL];
+		[w makeKeyAndOrderFront:nil];
 
-		// Display window
-		NSWindow* dw = [[NSWindow alloc]
-			initWithContentRect:screenFrame
-			styleMask:NSWindowStyleMaskBorderless
-			backing:NSBackingStoreBuffered defer:NO];
-		[dw setLevel:NSFloatingWindowLevel];
-		[dw setOpaque:NO];
-		[dw setIgnoresMouseEvents:YES];
-		[dw setBackgroundColor:[NSColor clearColor]];
-		[dw setCollectionBehavior:
-			NSWindowCollectionBehaviorCanJoinAllSpaces |
-			NSWindowCollectionBehaviorStationary];
-		PDDisplayView* dv = [[PDDisplayView alloc]
-			initWithFrame:screenFrame pdWindow:this];
-		[dw setContentView:dv];
-		[dw orderFront:nil];
-		[dv startTimer];
-		displayWin  = (__bridge void*)dw;
-		displayView = (__bridge void*)dv;
-
-		NSWindow* rack = [NSApp mainWindow];
-		if (rack) {
-			NSRect f = rack.frame;
-			rackX = f.origin.x; rackY = f.origin.y;
-			rackW = f.size.width; rackH = f.size.height;
-		}
+		win  = (__bridge void*)w;
+		view = (__bridge void*)v;
 
 		{
 			std::lock_guard<std::mutex> lock(readyMutex);
@@ -138,18 +57,13 @@ void PDWindow::close() {
 		viewReady = true;
 	}
 	readyCv.notify_all();
-
-	if (displayView)
-		[(__bridge PDDisplayView*)displayView stopTimer];
-
 	if (renderThread.joinable()) renderThread.join();
 
-	void* rw = renderWin, *dw = displayWin;
-	renderWin = renderView = displayWin = displayView = nullptr;
-	if (rw || dw) {
+	void* w = win;
+	win = view = nullptr;
+	if (w) {
 		dispatch_async(dispatch_get_main_queue(), ^{
-			if (rw) [(__bridge NSWindow*)rw close];
-			if (dw) [(__bridge NSWindow*)dw close];
+			[(__bridge NSWindow*)w close];
 		});
 	}
 }
@@ -161,8 +75,8 @@ void PDWindow::loop() {
 	}
 	if (!running) return;
 
-	PDGLView* rv = (__bridge PDGLView*)renderView;
-	NSOpenGLContext* ctx = [rv openGLContext];
+	PDGLView* v = (__bridge PDGLView*)view;
+	NSOpenGLContext* ctx = [v openGLContext];
 	[ctx makeCurrentContext];
 
 	projectM::Settings s;
@@ -171,21 +85,7 @@ void PDWindow::loop() {
 	s.fps = 60; s.meshX = 32; s.meshY = 24;
 	projectM* pm = new projectM(s);
 
-	int frameCount = 0;
-	std::atomic<float>* arx = &rackX, *ary = &rackY, *arw = &rackW, *arh = &rackH;
-
 	while (running) {
-		if (++frameCount % 60 == 0) {
-			dispatch_async(dispatch_get_main_queue(), ^{
-				NSWindow* rack = [NSApp mainWindow];
-				if (rack) {
-					NSRect f = rack.frame;
-					*arx = f.origin.x; *ary = f.origin.y;
-					*arw = f.size.width; *arh = f.size.height;
-				}
-			});
-		}
-
 		if (requestNext.exchange(false)) pm->selectNext(true);
 		if (requestPrev.exchange(false)) pm->selectPrevious(true);
 
@@ -194,13 +94,6 @@ void PDWindow::loop() {
 		{
 			std::lock_guard<std::mutex> lock(pixelMutex);
 			glReadPixels(0, 0, pixelW, pixelH, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
-
-			int x0 = std::max(0, (int)rackX.load());
-			int y0 = std::max(0, (int)rackY.load());
-			int x1 = std::min(pixelW, x0 + (int)rackW.load());
-			int y1 = std::min(pixelH, y0 + (int)rackH.load());
-			for (int y = y0; y < y1; y++)
-				memset(pixels.data() + y*pixelW*4 + x0*4, 0, (x1-x0)*4);
 			pixelsDirty = true;
 		}
 
