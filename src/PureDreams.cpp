@@ -8,7 +8,9 @@
 #include <OpenGL/OpenGL.h>
 #include <OpenGL/gl.h>
 
-static const int PANEL_HP = 128; // width in HP — covers a full standard rack row
+static const int PANEL_HP = 4;
+static const float CASE_W  = 2600.f;
+static const float CASE_H  = RACK_GRID_HEIGHT;
 
 struct PureDreams : Module {
 	enum ParamId {
@@ -17,35 +19,19 @@ struct PureDreams : Module {
 		NEXT_PARAM,
 		PARAMS_LEN
 	};
-	enum InputId {
-		LEFT_INPUT,
-		RIGHT_INPUT,
-		INPUTS_LEN
-	};
-	enum OutputId {
-		OUTPUTS_LEN
-	};
-	enum LightId {
-		LIGHTS_LEN
-	};
+	enum InputId { INPUTS_LEN };
+	enum OutputId { OUTPUTS_LEN };
+	enum LightId { LIGHTS_LEN };
 
 	PureDreams() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
-		configParam(BRIGHTNESS_PARAM, 0.f, 1.f, 0.7f, "Brightness");
-		configButton(PREV_PARAM, "Previous preset");
+		configParam(BRIGHTNESS_PARAM, 0.f, 1.f, 0.8f, "Brightness");
+		configButton(PREV_PARAM, "Prev preset");
 		configButton(NEXT_PARAM, "Next preset");
-		configInput(LEFT_INPUT, "Left audio");
-		configInput(RIGHT_INPUT, "Right audio");
 	}
 
-	void process(const ProcessArgs& args) override {
-		// Handled in the widget render thread
-	}
+	void process(const ProcessArgs&) override {}
 };
-
-// ─── Renderer ────────────────────────────────────────────────────────────────
-// Runs projectM in a background thread, blits to a shared pixel buffer.
-// The widget reads the buffer each frame and uploads it as a NanoVG image.
 
 struct ProjectMRenderer {
 	std::thread renderThread;
@@ -53,11 +39,11 @@ struct ProjectMRenderer {
 	std::atomic<bool> running{false};
 	std::atomic<bool> requestNext{false};
 	std::atomic<bool> requestPrev{false};
-	std::atomic<float> brightness{0.7f};
+	std::atomic<float> brightness{0.8f};
 
 	int width = 1280;
-	int height = 720;
-	std::vector<uint8_t> pixels; // RGBA, width*height*4
+	int height = 128;
+	std::vector<uint8_t> pixels;
 
 	projectM* pm = nullptr;
 
@@ -76,8 +62,8 @@ struct ProjectMRenderer {
 	CGLContextObj createContext() {
 		CGLPixelFormatAttribute attrs[] = {
 			kCGLPFAAccelerated,
-			kCGLPFAColorSize,   (CGLPixelFormatAttribute)24,
-			kCGLPFADepthSize,   (CGLPixelFormatAttribute)16,
+			kCGLPFAColorSize,     (CGLPixelFormatAttribute)24,
+			kCGLPFADepthSize,     (CGLPixelFormatAttribute)16,
 			kCGLPFAOpenGLProfile, (CGLPixelFormatAttribute)kCGLOGLPVersion_3_2_Core,
 			(CGLPixelFormatAttribute)0
 		};
@@ -103,19 +89,15 @@ struct ProjectMRenderer {
 		s.meshY        = 24;
 		pm = new projectM(s);
 
-		if (!pm) return;
-
 		while (running) {
-			if (requestNext.exchange(false))
-				pm->selectNext(true);
-			if (requestPrev.exchange(false))
-				pm->selectPrevious(true);
+			if (requestNext.exchange(false)) pm->selectNext(true);
+			if (requestPrev.exchange(false)) pm->selectPrevious(true);
 
 			pm->renderFrame();
 
 			{
 				std::lock_guard<std::mutex> lock(bufferMutex);
-				// glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+				glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
 			}
 		}
 
@@ -127,24 +109,19 @@ struct ProjectMRenderer {
 
 	void feedAudio(float left, float right) {
 		if (!pm) return;
-		float pcm[2][2] = {{left, right}, {left, right}};
-		pm->pcm()->addPCMfloat(pcm[0], 2);
+		float pcm[2] = {left, right};
+		pm->pcm()->addPCMfloat(pcm, 2);
 	}
 
 	~ProjectMRenderer() { stop(); }
 };
 
-// ─── Widget ──────────────────────────────────────────────────────────────────
-
 struct PureDreamsWidget : ModuleWidget {
 	ProjectMRenderer* renderer = nullptr;
 	int nvgImageId = -1;
-	bool prevNextState = false;
 
 	PureDreamsWidget(PureDreams* module) {
 		setModule(module);
-
-		// Wide blank panel — no SVG needed, we draw everything ourselves
 		box.size = Vec(PANEL_HP * RACK_GRID_WIDTH, RACK_GRID_HEIGHT);
 
 		if (module) {
@@ -152,18 +129,13 @@ struct PureDreamsWidget : ModuleWidget {
 			renderer->start();
 		}
 
-		// Controls — left strip, like Purfenator's label area
-		float x = 20.f;
-		addParam(createParamCentered<RoundBlackKnob>(
-			Vec(x, 60.f), module, PureDreams::BRIGHTNESS_PARAM));
-		addParam(createParamCentered<VCVButton>(
-			Vec(x, 120.f), module, PureDreams::PREV_PARAM));
-		addParam(createParamCentered<VCVButton>(
-			Vec(x, 160.f), module, PureDreams::NEXT_PARAM));
-		addInput(createInputCentered<PJ301MPort>(
-			Vec(x, 240.f), module, PureDreams::LEFT_INPUT));
-		addInput(createInputCentered<PJ301MPort>(
-			Vec(x, 280.f), module, PureDreams::RIGHT_INPUT));
+		float cx = box.size.x / 2.f;
+		addParam(createParamCentered<Trimpot>(
+			Vec(cx, 80.f), module, PureDreams::BRIGHTNESS_PARAM));
+		addParam(createParamCentered<TL1105>(
+			Vec(cx, 140.f), module, PureDreams::PREV_PARAM));
+		addParam(createParamCentered<TL1105>(
+			Vec(cx, 200.f), module, PureDreams::NEXT_PARAM));
 	}
 
 	~PureDreamsWidget() {
@@ -171,82 +143,88 @@ struct PureDreamsWidget : ModuleWidget {
 	}
 
 	void draw(const DrawArgs& args) override {
-		// 1. Draw the case background (dark panel, rounded rect)
-		float r = 8.f; // corner radius
-		float w = box.size.x;
-		float h = box.size.y;
+		float pw = box.size.x;
+		float h  = CASE_H;
+		float cw = CASE_W;
 
+		// case background — extends far to the right behind other modules
 		nvgBeginPath(args.vg);
-		nvgRoundedRect(args.vg, 0, 0, w, h, r);
-		nvgFillColor(args.vg, nvgRGB(18, 18, 22)); // near-black case colour
+		nvgRoundedRect(args.vg, 0, 0, cw, h, 6.f);
+		nvgFillColor(args.vg, nvgRGB(14, 14, 18));
 		nvgFill(args.vg);
 
-		// 2. Draw projectM frame (inset, where the visuals live)
+		// case border
+		nvgBeginPath(args.vg);
+		nvgRoundedRect(args.vg, 0, 0, cw, h, 6.f);
+		nvgStrokeColor(args.vg, nvgRGB(50, 50, 60));
+		nvgStrokeWidth(args.vg, 2.f);
+		nvgStroke(args.vg);
+
+		// projectM texture
 		if (renderer && nvgImageId >= 0) {
-			float margin = 36.f; // leave left strip for controls
+			float brightness = renderer->brightness.load();
 			NVGpaint paint = nvgImagePattern(
-				args.vg, margin, 0, w - margin, h, 0.f, nvgImageId, 1.f);
+				args.vg, pw, 0, cw - pw, h, 0.f, nvgImageId, brightness);
 			nvgBeginPath(args.vg);
-			nvgRect(args.vg, margin, 0, w - margin, h);
+			nvgRect(args.vg, pw, 0, cw - pw, h);
 			nvgFillPaint(args.vg, paint);
 			nvgFill(args.vg);
 		}
 
-		// 3. Brightness overlay (black at 0 brightness, transparent at 1)
-		if (renderer) {
-			float brightness = renderer->brightness.load();
-			float alpha = 1.f - brightness;
-			nvgBeginPath(args.vg);
-			nvgRect(args.vg, 36.f, 0, w - 36.f, h);
-			nvgFillColor(args.vg, nvgRGBAf(0.f, 0.f, 0.f, alpha));
-			nvgFill(args.vg);
-		}
-
-		// 4. Left label strip
+		// control strip (our actual narrow panel)
 		nvgBeginPath(args.vg);
-		nvgRect(args.vg, 0, 0, 36.f, h);
-		nvgFillColor(args.vg, nvgRGB(12, 12, 16));
+		nvgRect(args.vg, 0, 0, pw, h);
+		nvgFillColor(args.vg, nvgRGB(10, 10, 14));
 		nvgFill(args.vg);
 
-		// Vertical text label
+		// right edge of control strip separator line
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, pw, 0);
+		nvgLineTo(args.vg, pw, h);
+		nvgStrokeColor(args.vg, nvgRGB(50, 50, 60));
+		nvgStrokeWidth(args.vg, 1.f);
+		nvgStroke(args.vg);
+
+		// vertical label
 		nvgSave(args.vg);
-		nvgTranslate(args.vg, 12.f, h / 2.f);
+		nvgTranslate(args.vg, pw / 2.f, h / 2.f);
 		nvgRotate(args.vg, -M_PI / 2.f);
-		nvgFontSize(args.vg, 11.f);
-		nvgFillColor(args.vg, nvgRGB(180, 180, 200));
+		nvgFontSize(args.vg, 9.f);
+		nvgFillColor(args.vg, nvgRGB(120, 120, 140));
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-		nvgText(args.vg, 0, 0, "PURE DREAMS", NULL);
+		nvgText(args.vg, 0, 0, "PURE DREAMS", nullptr);
 		nvgRestore(args.vg);
 
 		ModuleWidget::draw(args);
 	}
 
 	void step() override {
-		ModuleWidget& mw = *this;
-		PureDreams* module = dynamic_cast<PureDreams*>(mw.module);
+		PureDreams* module = dynamic_cast<PureDreams*>(this->module);
 
 		if (module && renderer) {
-			// Feed brightness
 			renderer->brightness = module->params[PureDreams::BRIGHTNESS_PARAM].getValue();
 
-			// Feed next/prev button triggers
 			if (module->params[PureDreams::NEXT_PARAM].getValue() > 0.f)
 				renderer->requestNext = true;
 			if (module->params[PureDreams::PREV_PARAM].getValue() > 0.f)
 				renderer->requestPrev = true;
 
-			// Feed audio (normalise ±5V → ±1.0)
-			float L = module->inputs[PureDreams::LEFT_INPUT].getVoltage() / 5.f;
-			float R = module->inputs[PureDreams::RIGHT_INPUT].getVoltage() / 5.f;
-			renderer->feedAudio(L, R);
-
-			// Upload latest pixel buffer as NanoVG image
-			// (once GL context is wired up, uncomment below)
-			// std::lock_guard<std::mutex> lock(renderer->bufferMutex);
-			// if (nvgImageId < 0)
-			//     nvgImageId = nvgCreateImageRGBA(args.vg, renderer->width, renderer->height, 0, renderer->pixels.data());
-			// else
-			//     nvgUpdateImage(args.vg, nvgImageId, renderer->pixels.data());
+			{
+				std::lock_guard<std::mutex> lock(renderer->bufferMutex);
+				if (!renderer->pixels.empty()) {
+					if (nvgImageId < 0)
+						nvgImageId = nvgCreateImageRGBA(
+							APP->window->vg,
+							renderer->width, renderer->height,
+							NVG_IMAGE_FLIPY,
+							renderer->pixels.data());
+					else
+						nvgUpdateImage(
+							APP->window->vg,
+							nvgImageId,
+							renderer->pixels.data());
+				}
+			}
 		}
 
 		ModuleWidget::step();
