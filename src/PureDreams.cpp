@@ -20,9 +20,9 @@ struct RackBgWidget : widget::Widget {
 	}
 
 	void draw(const DrawArgs& args) override {
-		if (!pdWin || pdWin->pixels.empty()) return;
+		float w = box.size.x, h = box.size.y;
 
-		{
+		if (pdWin && !pdWin->pixels.empty()) {
 			std::lock_guard<std::mutex> lock(pdWin->pixelMutex);
 			if (pdWin->pixelsDirty) {
 				if (nvgImg >= 0) nvgDeleteImage(args.vg, nvgImg);
@@ -31,18 +31,24 @@ struct RackBgWidget : widget::Widget {
 				pdWin->pixelsDirty = false;
 			}
 		}
-		if (nvgImg < 0) return;
 
-		float w = box.size.x, h = box.size.y;
-		nvgSave(args.vg);
-		nvgTranslate(args.vg, 0, h);
-		nvgScale(args.vg, 1.f, -1.f);
-		NVGpaint p = nvgImagePattern(args.vg, 0, 0, w, h, 0.f, nvgImg, 1.f);
-		nvgBeginPath(args.vg);
-		nvgRect(args.vg, 0, 0, w, h);
-		nvgFillPaint(args.vg, p);
-		nvgFill(args.vg);
-		nvgRestore(args.vg);
+		if (nvgImg >= 0) {
+			nvgSave(args.vg);
+			nvgTranslate(args.vg, 0, h);
+			nvgScale(args.vg, 1.f, -1.f);
+			NVGpaint p = nvgImagePattern(args.vg, 0, 0, w, h, 0.f, nvgImg, 1.f);
+			nvgBeginPath(args.vg);
+			nvgRect(args.vg, 0, 0, w, h);
+			nvgFillPaint(args.vg, p);
+			nvgFill(args.vg);
+			nvgRestore(args.vg);
+		} else {
+			// Dark fallback until projectM is ready
+			nvgBeginPath(args.vg);
+			nvgRect(args.vg, 0, 0, w, h);
+			nvgFillColor(args.vg, nvgRGB(14, 14, 18));
+			nvgFill(args.vg);
+		}
 	}
 };
 
