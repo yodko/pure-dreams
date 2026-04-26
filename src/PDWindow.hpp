@@ -26,6 +26,9 @@ struct PDWindow {
 	bool pixelsDirty = false;
 	std::atomic<int> requestPreset{-1};
 
+	std::mutex nameMutex;
+	std::string currentPresetName;
+
 	void open();
 	void close();
 	void loop();

@@ -94,16 +94,28 @@ void PDWindow::loop() {
 	projectM::Settings s;
 	s.windowWidth  = pixelW;
 	s.windowHeight = pixelH;
+	s.presetURL    = "/opt/homebrew/Cellar/projectm/3.1.12/share/projectM/presets";
+	s.shuffleEnabled = true;
+	s.presetDuration = 30;
 	s.fps = 60; s.meshX = 32; s.meshY = 24;
 	projectM* pm = new projectM(s);
 
 	while (running) {
-		if (requestNext.exchange(false)) pm->selectNext(true);
-		if (requestPrev.exchange(false)) pm->selectPrevious(true);
+		if (requestNext.exchange(false)) { pm->selectNext(true); }
+		if (requestPrev.exchange(false)) { pm->selectPrevious(true); }
 		int preset = requestPreset.exchange(-1);
 		if (preset >= 0) pm->selectPreset((unsigned)preset, true);
 
 		pm->renderFrame();
+
+		// Update current preset name
+		unsigned int idx = 0;
+		if (pm->selectedPresetIndex(idx)) {
+			std::string name;
+			pm->getPresetName(idx, name);
+			std::lock_guard<std::mutex> nl(nameMutex);
+			currentPresetName = name;
+		}
 
 		{
 			std::lock_guard<std::mutex> lock(pixelMutex);

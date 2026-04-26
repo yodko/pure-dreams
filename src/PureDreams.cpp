@@ -3,12 +3,31 @@
 #include <mutex>
 #include <list>
 #include <algorithm>
+#include <dirent.h>
 
-// ── RackBgWidget — draws projectM as the VCV Rack background ─────────────────
+static const char* PRESET_DIR =
+	"/opt/homebrew/Cellar/projectm/3.1.12/share/projectM/presets";
+
+static std::vector<std::string> loadPresetNames() {
+	std::vector<std::string> v;
+	DIR* d = opendir(PRESET_DIR);
+	if (!d) return v;
+	struct dirent* e;
+	while ((e = readdir(d))) {
+		std::string n = e->d_name;
+		if (n.size() > 5 && n.substr(n.size()-5) == ".milk")
+			v.push_back(n.substr(0, n.size()-5));
+	}
+	closedir(d);
+	std::sort(v.begin(), v.end());
+	return v;
+}
+
+// ── RackBgWidget ──────────────────────────────────────────────────────────────
 
 struct RackBgWidget : widget::Widget {
 	PDWindow* pdWin;
-	int nvgImg = -1;
+	int   nvgImg    = -1;
 	float brightness = 1.f;
 
 	RackBgWidget(PDWindow* w) : pdWin(w) {
@@ -37,21 +56,20 @@ struct RackBgWidget : widget::Widget {
 		if (nvgImg >= 0) {
 			float cx = args.clipBox.pos.x, cy = args.clipBox.pos.y;
 			float cw = args.clipBox.size.x, ch = args.clipBox.size.y;
-			if (cw <= 0 || ch <= 0) { cw = w; ch = h; cx = cy = 0; }
-			float imgW = pdWin->pixelW, imgH = pdWin->pixelH;
-			float scale = std::max(cw / imgW, ch / imgH);
-			float pw = imgW * scale, ph = imgH * scale;
-			float ox = cx + (cw - pw) / 2.f;
+			if (cw <= 0 || ch <= 0) { cw=w; ch=h; cx=cy=0; }
+			float scale = std::max(cw/(float)pdWin->pixelW, ch/(float)pdWin->pixelH);
+			float pw = pdWin->pixelW*scale, ph = pdWin->pixelH*scale;
+			float ox = cx + (cw-pw)/2.f;
 			nvgSave(args.vg);
-			nvgTranslate(args.vg, 0, cy + ch);
-			nvgScale(args.vg, 1.f, -1.f);
-			NVGpaint p = nvgImagePattern(args.vg, ox, (ch-ph)/2.f, pw, ph, 0, nvgImg, brightness);
+			nvgTranslate(args.vg, 0, cy+ch); nvgScale(args.vg, 1, -1);
+			NVGpaint p = nvgImagePattern(args.vg, ox, (ch-ph)/2.f, pw, ph,
+				0, nvgImg, brightness);
 			nvgBeginPath(args.vg); nvgRect(args.vg, cx, 0, cw, ch);
 			nvgFillPaint(args.vg, p); nvgFill(args.vg);
 			nvgRestore(args.vg);
 		} else {
 			nvgBeginPath(args.vg); nvgRect(args.vg, 0, 0, w, h);
-			nvgFillColor(args.vg, nvgRGB(28, 28, 32)); nvgFill(args.vg);
+			nvgFillColor(args.vg, nvgRGB(20,20,26)); nvgFill(args.vg);
 		}
 	}
 };
@@ -64,13 +82,41 @@ struct PureDreams : Module {
 	enum OutputId { OUTPUTS_LEN };
 	enum LightId  { LIGHTS_LEN };
 
+	dsp::SchmittTrigger nextTrig, prevTrig;
+
 	PureDreams() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		configButton(PREV_PARAM, "Prev preset");
 		configButton(NEXT_PARAM, "Next preset");
 		configParam(BRIGHTNESS_PARAM, 0.f, 1.f, 1.f, "Brightness");
 	}
+
 	void process(const ProcessArgs&) override {}
+};
+
+// ── Searchable preset menu item ───────────────────────────────────────────────
+
+struct PresetItem : MenuItem {
+	PDWindow* pdWin;
+	int index;
+	std::string presetName;
+	ui::TextField* searchField;
+
+	void onAction(const ActionEvent&) override {
+		if (pdWin) pdWin->requestPreset = index;
+	}
+
+	void step() override {
+		// Filter by search
+		if (searchField) {
+			std::string query = searchField->text;
+			std::string name  = presetName;
+			std::transform(query.begin(), query.end(), query.begin(), ::tolower);
+			std::transform(name.begin(),  name.end(),  name.begin(),  ::tolower);
+			visible = query.empty() || name.find(query) != std::string::npos;
+		}
+		MenuItem::step();
+	}
 };
 
 // ── Widget ────────────────────────────────────────────────────────────────────
@@ -78,7 +124,11 @@ struct PureDreams : Module {
 struct PureDreamsWidget : ModuleWidget {
 	PDWindow*     pdWin  = nullptr;
 	RackBgWidget* rackBg = nullptr;
-	bool wasNext = false, wasPrev = false;
+
+	static std::vector<std::string>& presets() {
+		static std::vector<std::string> p = loadPresetNames();
+		return p;
+	}
 
 	PureDreamsWidget(PureDreams* module) {
 		setModule(module);
@@ -89,7 +139,7 @@ struct PureDreamsWidget : ModuleWidget {
 			pdWin->open();
 			rackBg = new RackBgWidget(pdWin);
 			auto& ch = APP->scene->rack->children;
-			auto it = ch.begin();
+			auto it  = ch.begin();
 			if (!ch.empty()) std::advance(it, 1);
 			ch.insert(it, rackBg);
 			rackBg->parent = APP->scene->rack;
@@ -97,19 +147,18 @@ struct PureDreamsWidget : ModuleWidget {
 
 		float cx = box.size.x / 2.f;
 		addParam(createParamCentered<VCVBezel>(
-			Vec(cx, RACK_GRID_HEIGHT/2.f - 40.f), module, PureDreams::PREV_PARAM));
+			Vec(cx, RACK_GRID_HEIGHT/2.f - 50.f), module, PureDreams::PREV_PARAM));
 		addParam(createParamCentered<VCVBezel>(
-			Vec(cx, RACK_GRID_HEIGHT/2.f), module, PureDreams::NEXT_PARAM));
+			Vec(cx, RACK_GRID_HEIGHT/2.f - 10.f), module, PureDreams::NEXT_PARAM));
 		addParam(createParamCentered<Trimpot>(
-			Vec(cx, RACK_GRID_HEIGHT/2.f + 50.f), module, PureDreams::BRIGHTNESS_PARAM));
+			Vec(cx, RACK_GRID_HEIGHT/2.f + 45.f), module, PureDreams::BRIGHTNESS_PARAM));
 	}
 
 	~PureDreamsWidget() {
 		if (rackBg) {
 			if (APP && APP->scene && APP->scene->rack)
 				APP->scene->rack->removeChild(rackBg);
-			delete rackBg;
-			rackBg = nullptr;
+			delete rackBg; rackBg = nullptr;
 		}
 		if (pdWin) { pdWin->close(); delete pdWin; pdWin = nullptr; }
 	}
@@ -117,11 +166,11 @@ struct PureDreamsWidget : ModuleWidget {
 	void step() override {
 		PureDreams* m = dynamic_cast<PureDreams*>(this->module);
 		if (m && pdWin) {
-			bool nextNow = m->params[PureDreams::NEXT_PARAM].getValue() > 0.5f;
-			bool prevNow = m->params[PureDreams::PREV_PARAM].getValue() > 0.5f;
-			if (nextNow && !wasNext) pdWin->requestNext = true;
-			if (prevNow && !wasPrev) pdWin->requestPrev = true;
-			wasNext = nextNow; wasPrev = prevNow;
+			// SchmittTrigger — same pattern as LFMEmbedded
+			if (m->nextTrig.process(m->params[PureDreams::NEXT_PARAM].getValue()) > 0.f)
+				pdWin->requestNext = true;
+			if (m->prevTrig.process(m->params[PureDreams::PREV_PARAM].getValue()) > 0.f)
+				pdWin->requestPrev = true;
 			if (rackBg)
 				rackBg->brightness = m->params[PureDreams::BRIGHTNESS_PARAM].getValue();
 		}
@@ -131,14 +180,57 @@ struct PureDreamsWidget : ModuleWidget {
 	void draw(const DrawArgs& args) override {
 		float w = box.size.x, h = box.size.y;
 		nvgBeginPath(args.vg); nvgRect(args.vg, 0, 0, w, h);
-		nvgFillColor(args.vg, nvgRGB(10, 10, 14)); nvgFill(args.vg);
+		nvgFillColor(args.vg, nvgRGB(10,10,14)); nvgFill(args.vg);
+
+		// Current preset name (shortened)
+		if (pdWin) {
+			std::lock_guard<std::mutex> nl(pdWin->nameMutex);
+			if (!pdWin->currentPresetName.empty()) {
+				std::string name = pdWin->currentPresetName;
+				if (name.size() > 18) name = name.substr(0,17) + "…";
+				nvgSave(args.vg);
+				nvgTranslate(args.vg, w/2.f, h/2.f + 80.f);
+				nvgRotate(args.vg, -M_PI/2.f);
+				nvgFontSize(args.vg, 7.f);
+				nvgFillColor(args.vg, nvgRGB(100,100,130));
+				nvgTextAlign(args.vg, NVG_ALIGN_CENTER|NVG_ALIGN_MIDDLE);
+				nvgText(args.vg, 0, 0, name.c_str(), nullptr);
+				nvgRestore(args.vg);
+			}
+		}
+
 		nvgSave(args.vg);
-		nvgTranslate(args.vg, w/2.f, h/2.f); nvgRotate(args.vg, -M_PI/2.f);
-		nvgFontSize(args.vg, 8.f); nvgFillColor(args.vg, nvgRGB(80, 80, 100));
+		nvgTranslate(args.vg, w/2.f, h/2.f - 80.f);
+		nvgRotate(args.vg, -M_PI/2.f);
+		nvgFontSize(args.vg, 8.f); nvgFillColor(args.vg, nvgRGB(80,80,100));
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER|NVG_ALIGN_MIDDLE);
 		nvgText(args.vg, 0, 0, "PURE DREAMS", nullptr);
 		nvgRestore(args.vg);
+
 		ModuleWidget::draw(args);
+	}
+
+	void appendContextMenu(Menu* menu) override {
+		menu->addChild(new MenuSeparator);
+
+		// Searchable preset list
+		menu->addChild(createMenuLabel("Presets"));
+
+		auto* search = createWidget<ui::TextField>(Vec(0,0));
+		search->placeholder = "search…";
+		search->box.size.x  = 200;
+		menu->addChild(search);
+
+		auto& ps = presets();
+		for (int i = 0; i < (int)ps.size(); i++) {
+			auto* item      = new PresetItem;
+			item->text      = ps[i];
+			item->pdWin     = pdWin;
+			item->index     = i;
+			item->presetName = ps[i];
+			item->searchField = search;
+			menu->addChild(item);
+		}
 	}
 };
 
