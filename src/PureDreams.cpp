@@ -101,47 +101,112 @@ struct RackBgWidget : widget::Widget {
 				x2 = std::max(x2, c->box.pos.x + c->box.size.x);
 				y2 = std::max(y2, c->box.pos.y + c->box.size.y);
 			}
-			x1-=pad; y1-=pad-4; x2+=pad; y2+=pad-4;
+			x1-=pad; y1-=pad+2; x2+=pad; y2+=pad+2;
 			float fw = x2-x1, fh = y2-y1;
+			float rr  = railColor.r, rg = railColor.g, rb = railColor.b;
 
-			// Drop shadow (layered for soft look)
-			for (int i = 3; i >= 1; i--) {
-				float off = i * 6.f;
+			// ── Soft drop shadow (always visible) ─────────────────────────
+			for (int i = 5; i >= 1; i--) {
+				float off = i * 5.f;
 				nvgBeginPath(args.vg);
 				nvgRoundedRect(args.vg, x1+off, y1+off, fw, fh, 8.f);
-				nvgFillColor(args.vg, nvgRGBA(0, 0, 0, (int)(60 / i)));
+				nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 25));
 				nvgFill(args.vg);
 			}
 
-			// Top rail
+			// ── Case inner background (solid, brightness-controlled) ───────
+			float bgAlpha = brightness; // 1 = solid, 0 = transparent (show projectM)
+			NVGpaint bgGrad = nvgLinearGradient(args.vg,
+				x1, y1 + railH,
+				x1, y2 - railH,
+				nvgRGBAf(caseColor.r + 0.06f, caseColor.g + 0.06f, caseColor.b + 0.06f, bgAlpha),
+				nvgRGBAf(caseColor.r - 0.02f, caseColor.g - 0.02f, caseColor.b - 0.02f, bgAlpha));
+			nvgBeginPath(args.vg);
+			nvgRect(args.vg, x1 + 8.f, y1 + railH, fw - 16.f, fh - railH * 2);
+			nvgFillPaint(args.vg, bgGrad);
+			nvgFill(args.vg);
+
+			// ── Top rail — metallic gradient ──────────────────────────────
+			NVGpaint topRail = nvgLinearGradient(args.vg,
+				x1, y1, x1, y1 + railH,
+				nvgRGBAf(rr+0.15f, rg+0.15f, rb+0.15f, 0.98f),  // bright highlight
+				nvgRGBAf(rr-0.04f, rg-0.04f, rb-0.04f, 0.98f)); // shadow
 			nvgBeginPath(args.vg);
 			nvgRoundedRect(args.vg, x1, y1, fw, railH, 6.f);
-			nvgFillColor(args.vg, nvgRGBAf(railColor.r, railColor.g, railColor.b, 0.92f));
+			nvgFillPaint(args.vg, topRail);
 			nvgFill(args.vg);
 
-			// Bottom rail
+			// ── Bottom rail ───────────────────────────────────────────────
+			NVGpaint botRail = nvgLinearGradient(args.vg,
+				x1, y2 - railH, x1, y2,
+				nvgRGBAf(rr+0.10f, rg+0.10f, rb+0.10f, 0.98f),
+				nvgRGBAf(rr-0.06f, rg-0.06f, rb-0.06f, 0.98f));
 			nvgBeginPath(args.vg);
-			nvgRoundedRect(args.vg, x1, y2-railH, fw, railH, 6.f);
-			nvgFillColor(args.vg, nvgRGBAf(railColor.r, railColor.g, railColor.b, 0.92f));
+			nvgRoundedRect(args.vg, x1, y2 - railH, fw, railH, 6.f);
+			nvgFillPaint(args.vg, botRail);
 			nvgFill(args.vg);
 
-			// Left strip
+			// ── Rail highlight line (top edge) ────────────────────────────
 			nvgBeginPath(args.vg);
-			nvgRect(args.vg, x1, y1+railH, 6.f, fh-railH*2);
-			nvgFillColor(args.vg, nvgRGBAf(caseColor.r, caseColor.g, caseColor.b, 0.92f));
-			nvgFill(args.vg);
+			nvgMoveTo(args.vg, x1 + 8, y1 + 1); nvgLineTo(args.vg, x2 - 8, y1 + 1);
+			nvgStrokeColor(args.vg, nvgRGBAf(1,1,1, 0.25f));
+			nvgStrokeWidth(args.vg, 1.f);
+			nvgStroke(args.vg);
 
-			// Right strip
+			// ── Screw holes (top rail) ────────────────────────────────────
+			auto drawScrew = [&](float sx, float sy) {
+				nvgBeginPath(args.vg);
+				nvgCircle(args.vg, sx, sy, 4.5f);
+				NVGpaint sp = nvgRadialGradient(args.vg, sx-1, sy-1, 0.5f, 4.5f,
+					nvgRGB(70,70,78), nvgRGB(28,28,34));
+				nvgFillPaint(args.vg, sp);
+				nvgFill(args.vg);
+				nvgBeginPath(args.vg);
+				nvgCircle(args.vg, sx, sy, 4.5f);
+				nvgStrokeColor(args.vg, nvgRGB(20,20,24));
+				nvgStrokeWidth(args.vg, 0.8f);
+				nvgStroke(args.vg);
+				// Slot
+				nvgBeginPath(args.vg);
+				nvgMoveTo(args.vg, sx-2.5f, sy); nvgLineTo(args.vg, sx+2.5f, sy);
+				nvgStrokeColor(args.vg, nvgRGBA(0,0,0,120));
+				nvgStrokeWidth(args.vg, 1.2f);
+				nvgStroke(args.vg);
+			};
+			float screwY1 = y1 + railH * 0.5f;
+			float screwY2 = y2 - railH * 0.5f;
+			float screwOff = 10.f;
+			drawScrew(x1 + screwOff, screwY1); drawScrew(x2 - screwOff, screwY1);
+			drawScrew(x1 + screwOff, screwY2); drawScrew(x2 - screwOff, screwY2);
+			// Additional screws along rails every 120px
+			for (float sx = x1 + 120.f; sx < x2 - 60.f; sx += 120.f) {
+				drawScrew(sx, screwY1);
+				drawScrew(sx, screwY2);
+			}
+
+			// ── Left/right side panels ────────────────────────────────────
+			float cr = caseColor.r, cg = caseColor.g, cb = caseColor.b;
 			nvgBeginPath(args.vg);
-			nvgRect(args.vg, x2-6.f, y1+railH, 6.f, fh-railH*2);
-			nvgFillColor(args.vg, nvgRGBAf(caseColor.r, caseColor.g, caseColor.b, 0.92f));
+			nvgRect(args.vg, x1, y1 + railH, 8.f, fh - railH * 2);
+			nvgFillColor(args.vg, nvgRGBAf(cr, cg, cb, 0.97f));
+			nvgFill(args.vg);
+			nvgBeginPath(args.vg);
+			nvgRect(args.vg, x2 - 8.f, y1 + railH, 8.f, fh - railH * 2);
+			nvgFillColor(args.vg, nvgRGBAf(cr, cg, cb, 0.97f));
 			nvgFill(args.vg);
 
-			// Outer border
+			// ── Outer border with 3D bevel ────────────────────────────────
+			// Dark outer edge
 			nvgBeginPath(args.vg);
 			nvgRoundedRect(args.vg, x1, y1, fw, fh, 8.f);
-			nvgStrokeColor(args.vg, borderColor);
-			nvgStrokeWidth(args.vg, 1.5f);
+			nvgStrokeColor(args.vg, nvgRGB(15,15,18));
+			nvgStrokeWidth(args.vg, 2.f);
+			nvgStroke(args.vg);
+			// Inner highlight (top-left) for 3D depth
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, x1+1.5f, y1+1.5f, fw-3.f, fh-3.f, 7.f);
+			nvgStrokeColor(args.vg, nvgRGBAf(1,1,1, 0.08f));
+			nvgStrokeWidth(args.vg, 1.f);
 			nvgStroke(args.vg);
 		}
 	}
@@ -158,14 +223,14 @@ struct PureDreams : Module {
 	dsp::SchmittTrigger prevTrig, nextTrig;
 	std::atomic<bool> requestNext{false}, requestPrev{false};
 
-	int caseR=18, caseG=18, caseB=22;
-	int railR=30, railG=30, railB=36;
+	int caseR=110, caseG=110, caseB=114;  // default: medium grey
+	int railR= 55, railG= 55, railB= 62;  // default: gunmetal
 
 	PureDreams() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		configButton(PREV_PARAM, "Prev preset");
 		configButton(NEXT_PARAM, "Next preset");
-		configParam(BRIGHTNESS_PARAM, 0.f, 1.f, 0.85f, "Brightness");
+		configParam(BRIGHTNESS_PARAM, 0.f, 1.f, 0.92f, "Case opacity");
 	}
 
 	void process(const ProcessArgs&) override {
@@ -277,19 +342,21 @@ struct PureDreamsWidget : ModuleWidget {
 		};
 
 		menu->addChild(createMenuLabel("  Rails"));
-		addColor("    Default",        30, 30, 36, true);
-		addColor("    Charcoal",       55, 55, 65, true);
-		addColor("    Midnight blue",  20, 28, 60, true);
-		addColor("    Gunmetal",       60, 65, 70, true);
-		addColor("    Gold",           80, 65, 20, true);
-		addColor("    Bronze",         70, 50, 25, true);
+		addColor("    Gunmetal (default)", 55, 55, 62, true);
+		addColor("    Charcoal",           70, 70, 78, true);
+		addColor("    Midnight blue",      35, 45, 80, true);
+		addColor("    Black",              28, 28, 32, true);
+		addColor("    Gold",              100, 80, 25, true);
+		addColor("    Bronze",             90, 65, 35, true);
 
-		menu->addChild(createMenuLabel("  Side strips"));
-		addColor("    Default",        18, 18, 22, false);
-		addColor("    Dark blue",      14, 18, 40, false);
-		addColor("    Dark green",     14, 30, 16, false);
-		addColor("    Dark red",       36, 14, 14, false);
-		addColor("    Dark purple",    28, 14, 40, false);
+		menu->addChild(createMenuLabel("  Case background"));
+		addColor("    Grey (default)",    110,110,114, false);
+		addColor("    Dark grey",          70, 70, 75, false);
+		addColor("    Midnight blue",      55, 65,110, false);
+		addColor("    Forest green",       55, 90, 65, false);
+		addColor("    Dark red",          110, 55, 55, false);
+		addColor("    Deep purple",        75, 55,115, false);
+		addColor("    Black",              28, 28, 32, false);
 
 		menu->addChild(new MenuSeparator);
 		menu->addChild(createMenuLabel("Presets (← →)"));
