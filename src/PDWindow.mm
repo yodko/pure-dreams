@@ -23,12 +23,18 @@ void PDWindow::open() {
 	dispatch_async(dispatch_get_main_queue(), ^{
 		if (!wantOpen) return;
 
-		// Off-screen window — moved far off screen so macOS allocates a real framebuffer
-		NSRect frame = NSMakeRect(-pixelW - 10, -pixelH - 10, pixelW, pixelH);
+		// Offscreen render window — completely hidden from Exposé/Mission Control
+		NSRect frame = NSMakeRect(0, 0, pixelW, pixelH);
 		NSWindow* w = [[NSWindow alloc]
 			initWithContentRect:frame
 			styleMask:NSWindowStyleMaskBorderless
 			backing:NSBackingStoreBuffered defer:NO];
+		// Hide from window management entirely
+		[w setCollectionBehavior:
+			NSWindowCollectionBehaviorTransient |
+			NSWindowCollectionBehaviorIgnoresCycle |
+			NSWindowCollectionBehaviorStationary];
+		[w setExcludedFromWindowsMenu:YES];
 
 		NSOpenGLPixelFormatAttribute attrs[] = {
 			NSOpenGLPFAOpenGLProfile, NSOpenGLProfileVersion3_2Core,
@@ -39,7 +45,8 @@ void PDWindow::open() {
 		PDGLView* v = [[PDGLView alloc] initWithFrame:frame pixelFormat:fmt];
 		[w setContentView:v];
 		[v prepareOpenGL];
-		[w makeKeyAndOrderFront:nil];
+		[w orderFront:nil];   // show briefly to initialise GL
+		[w orderOut:nil];     // then hide completely — GL context still active
 
 		win  = (__bridge void*)w;
 		view = (__bridge void*)v;

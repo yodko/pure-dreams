@@ -33,12 +33,13 @@ struct RackBgWidget : widget::Widget {
 	int nvgImg = -1;
 
 	// Case appearance
-	NVGcolor caseColor     = nvgRGB(18, 18, 22);
-	NVGcolor railColor     = nvgRGB(30, 30, 36);
-	NVGcolor borderColor   = nvgRGB(60, 60, 72);
-	float    railH         = 18.f;
-	float    pad           = 14.f;
-	float    brightness    = 0.85f;
+	NVGcolor caseColor   = nvgRGB(110, 110, 114);
+	NVGcolor railColor   = nvgRGB( 55,  55,  62);
+	NVGcolor borderColor = nvgRGB( 60,  60,  72);
+	int      caseR=110, caseG=110, caseB=114;
+	float    railH       = 20.f;
+	float    pad         = 16.f;
+	float    brightness  = 0.92f;
 
 	RackBgWidget(PDWindow* w) : pdWin(w) {
 		box.pos  = Vec(0, 0);
@@ -114,13 +115,11 @@ struct RackBgWidget : widget::Widget {
 				nvgFill(args.vg);
 			}
 
-			// ── Case inner background — fully opaque, covers projectM ─────
-			float cr2 = caseColor.r, cg2 = caseColor.g, cb2 = caseColor.b;
+			// ── Case inner background — fully opaque grey gradient ─────────
 			NVGpaint bgGrad = nvgLinearGradient(args.vg,
-				x1, y1 + railH,
-				x1, y2 - railH,
-				nvgRGBf(std::min(1.f, cr2 + 0.08f), std::min(1.f, cg2 + 0.08f), std::min(1.f, cb2 + 0.08f)),
-				nvgRGBf(std::max(0.f, cr2 - 0.05f), std::max(0.f, cg2 - 0.05f), std::max(0.f, cb2 - 0.05f)));
+				x1, y1 + railH, x1, y2 - railH,
+				nvgRGB(std::min(255, caseR+20), std::min(255, caseG+20), std::min(255, caseB+20)),
+				nvgRGB(std::max(0,   caseR-12), std::max(0,   caseG-12), std::max(0,   caseB-12)));
 			nvgBeginPath(args.vg);
 			nvgRect(args.vg, x1 + 8.f, y1 + railH, fw - 16.f, fh - railH * 2);
 			nvgFillPaint(args.vg, bgGrad);
@@ -290,8 +289,13 @@ struct PureDreamsWidget : ModuleWidget {
 	}
 
 	~PureDreamsWidget() {
-		if (rackBg) { APP->scene->rack->removeChild(rackBg); delete rackBg; }
-		if (pdWin)  { pdWin->close(); delete pdWin; }
+		if (rackBg) {
+			if (APP && APP->scene && APP->scene->rack)
+				APP->scene->rack->removeChild(rackBg);
+			delete rackBg;
+			rackBg = nullptr;
+		}
+		if (pdWin) { pdWin->close(); delete pdWin; pdWin = nullptr; }
 	}
 
 	void step() override {
@@ -308,6 +312,7 @@ struct PureDreamsWidget : ModuleWidget {
 			if (rackBg) {
 				rackBg->caseColor  = nvgRGB(m->caseR, m->caseG, m->caseB);
 				rackBg->railColor  = nvgRGB(m->railR, m->railG, m->railB);
+				rackBg->caseR = m->caseR; rackBg->caseG = m->caseG; rackBg->caseB = m->caseB;
 				rackBg->brightness = m->params[PureDreams::BRIGHTNESS_PARAM].getValue();
 			}
 		}
