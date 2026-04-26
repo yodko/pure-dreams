@@ -2,6 +2,7 @@
 #include "PDWindow.hpp"
 #include <mutex>
 #include <list>
+#include <algorithm>
 
 // Draws projectM pixels as background, injected directly into RackWidget
 // before ModuleContainer so it renders behind all modules.
@@ -33,10 +34,17 @@ struct RackBgWidget : widget::Widget {
 		}
 
 		if (nvgImg >= 0) {
+			// Scale image to cover the rack area maintaining aspect ratio
+			float imgW = pdWin->pixelW, imgH = pdWin->pixelH;
+			float scaleX = w / imgW, scaleY = h / imgH;
+			float scale = std::max(scaleX, scaleY);
+			float pw = imgW * scale, ph = imgH * scale;
+			float ox = (w - pw) / 2.f, oy = (h - ph) / 2.f;
+
 			nvgSave(args.vg);
 			nvgTranslate(args.vg, 0, h);
 			nvgScale(args.vg, 1.f, -1.f);
-			NVGpaint p = nvgImagePattern(args.vg, 0, 0, w, h, 0.f, nvgImg, 1.f);
+			NVGpaint p = nvgImagePattern(args.vg, ox, oy, pw, ph, 0.f, nvgImg, 1.f);
 			nvgBeginPath(args.vg);
 			nvgRect(args.vg, 0, 0, w, h);
 			nvgFillPaint(args.vg, p);
