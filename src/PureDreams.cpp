@@ -114,13 +114,13 @@ struct RackBgWidget : widget::Widget {
 				nvgFill(args.vg);
 			}
 
-			// ── Case inner background (solid, brightness-controlled) ───────
-			float bgAlpha = brightness; // 1 = solid, 0 = transparent (show projectM)
+			// ── Case inner background — fully opaque, covers projectM ─────
+			float cr2 = caseColor.r, cg2 = caseColor.g, cb2 = caseColor.b;
 			NVGpaint bgGrad = nvgLinearGradient(args.vg,
 				x1, y1 + railH,
 				x1, y2 - railH,
-				nvgRGBAf(caseColor.r + 0.06f, caseColor.g + 0.06f, caseColor.b + 0.06f, bgAlpha),
-				nvgRGBAf(caseColor.r - 0.02f, caseColor.g - 0.02f, caseColor.b - 0.02f, bgAlpha));
+				nvgRGBf(std::min(1.f, cr2 + 0.08f), std::min(1.f, cg2 + 0.08f), std::min(1.f, cb2 + 0.08f)),
+				nvgRGBf(std::max(0.f, cr2 - 0.05f), std::max(0.f, cg2 - 0.05f), std::max(0.f, cb2 - 0.05f)));
 			nvgBeginPath(args.vg);
 			nvgRect(args.vg, x1 + 8.f, y1 + railH, fw - 16.f, fh - railH * 2);
 			nvgFillPaint(args.vg, bgGrad);
@@ -263,6 +263,7 @@ struct PureDreams : Module {
 struct PureDreamsWidget : ModuleWidget {
 	PDWindow*     pdWin  = nullptr;
 	RackBgWidget* rackBg = nullptr;
+	bool wasNext = false, wasPrev = false;
 
 	PureDreamsWidget(PureDreams* module) {
 		setModule(module);
@@ -296,8 +297,14 @@ struct PureDreamsWidget : ModuleWidget {
 	void step() override {
 		PureDreams* m = dynamic_cast<PureDreams*>(this->module);
 		if (m && pdWin) {
-			if (m->requestNext.exchange(false)) pdWin->requestNext = true;
-			if (m->requestPrev.exchange(false)) pdWin->requestPrev = true;
+			// Edge detect next/prev directly in step() — reliable UI-thread approach
+			bool nextNow = m->params[PureDreams::NEXT_PARAM].getValue() > 0.5f;
+			bool prevNow = m->params[PureDreams::PREV_PARAM].getValue() > 0.5f;
+			if (nextNow && !wasNext) pdWin->requestNext = true;
+			if (prevNow && !wasPrev) pdWin->requestPrev = true;
+			wasNext = nextNow;
+			wasPrev = prevNow;
+
 			if (rackBg) {
 				rackBg->caseColor  = nvgRGB(m->caseR, m->caseG, m->caseB);
 				rackBg->railColor  = nvgRGB(m->railR, m->railG, m->railB);
