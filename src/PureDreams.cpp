@@ -53,6 +53,10 @@ struct RackBgWidget : widget::Widget {
 			}
 		}
 
+		// Always fill solid dark first — prevents VCV grey showing through at low brightness
+		nvgBeginPath(args.vg); nvgRect(args.vg, 0, 0, w, h);
+		nvgFillColor(args.vg, nvgRGB(12, 12, 16)); nvgFill(args.vg);
+
 		if (nvgImg >= 0) {
 			float cx = args.clipBox.pos.x, cy = args.clipBox.pos.y;
 			float cw = args.clipBox.size.x, ch = args.clipBox.size.y;
@@ -67,9 +71,6 @@ struct RackBgWidget : widget::Widget {
 			nvgBeginPath(args.vg); nvgRect(args.vg, cx, 0, cw, ch);
 			nvgFillPaint(args.vg, p); nvgFill(args.vg);
 			nvgRestore(args.vg);
-		} else {
-			nvgBeginPath(args.vg); nvgRect(args.vg, 0, 0, w, h);
-			nvgFillColor(args.vg, nvgRGB(20,20,26)); nvgFill(args.vg);
 		}
 	}
 
