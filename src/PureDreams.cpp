@@ -3,12 +3,41 @@
 #include <mutex>
 #include <list>
 #include <algorithm>
+#include <dirent.h>
+#include <string>
+#include <vector>
 
-// Draws projectM pixels as background, injected directly into RackWidget
-// before ModuleContainer so it renders behind all modules.
+static std::string PRESET_DIR =
+	"/opt/homebrew/Cellar/projectm/3.1.12/share/projectM/presets";
+
+static std::vector<std::string> getPresetNames() {
+	std::vector<std::string> names;
+	DIR* d = opendir(PRESET_DIR.c_str());
+	if (!d) return names;
+	struct dirent* e;
+	while ((e = readdir(d))) {
+		std::string n = e->d_name;
+		if (n.size() > 5 && n.substr(n.size()-5) == ".milk") {
+			names.push_back(n.substr(0, n.size()-5));
+		}
+	}
+	closedir(d);
+	std::sort(names.begin(), names.end());
+	return names;
+}
+
+// ── RackBgWidget ──────────────────────────────────────────────────────────────
+
 struct RackBgWidget : widget::Widget {
 	PDWindow* pdWin;
 	int nvgImg = -1;
+
+	// Case appearance
+	NVGcolor caseColor     = nvgRGB(18, 18, 22);
+	NVGcolor railColor     = nvgRGB(26, 26, 32);
+	NVGcolor borderColor   = nvgRGB(55, 55, 68);
+	float    railH         = 18.f;
+	float    pad           = 14.f;
 
 	RackBgWidget(PDWindow* w) : pdWin(w) {
 		box.pos  = Vec(0, 0);
@@ -23,6 +52,7 @@ struct RackBgWidget : widget::Widget {
 	void draw(const DrawArgs& args) override {
 		float w = box.size.x, h = box.size.y;
 
+		// ── projectM background ────────────────────────────────────────────
 		if (pdWin && !pdWin->pixels.empty()) {
 			std::lock_guard<std::mutex> lock(pdWin->pixelMutex);
 			if (pdWin->pixelsDirty) {
@@ -34,103 +64,136 @@ struct RackBgWidget : widget::Widget {
 		}
 
 		if (nvgImg >= 0) {
-			// Use clipBox — the visible portion of the rack in rack coordinates
 			float cx = args.clipBox.pos.x, cy = args.clipBox.pos.y;
 			float cw = args.clipBox.size.x, ch = args.clipBox.size.y;
-			if (cw <= 0 || ch <= 0) { cw = w; ch = h; cx = 0; cy = 0; }
-
+			if (cw <= 0 || ch <= 0) { cw = w; ch = h; cx = cy = 0; }
 			float imgW = pdWin->pixelW, imgH = pdWin->pixelH;
 			float scale = std::max(cw / imgW, ch / imgH);
 			float pw = imgW * scale, ph = imgH * scale;
 			float ox = cx + (cw - pw) / 2.f;
-
-			// Y-flip: translate to bottom of clip area, flip, draw
 			nvgSave(args.vg);
 			nvgTranslate(args.vg, 0, cy + ch);
 			nvgScale(args.vg, 1.f, -1.f);
-			NVGpaint p = nvgImagePattern(args.vg, ox, (ch - ph) / 2.f, pw, ph, 0.f, nvgImg, 1.f);
-			nvgBeginPath(args.vg);
-			nvgRect(args.vg, cx, 0, cw, ch);
-			nvgFillPaint(args.vg, p);
-			nvgFill(args.vg);
+			NVGpaint p = nvgImagePattern(args.vg, ox, (ch-ph)/2.f, pw, ph, 0, nvgImg, 1.f);
+			nvgBeginPath(args.vg); nvgRect(args.vg, cx, 0, cw, ch);
+			nvgFillPaint(args.vg, p); nvgFill(args.vg);
 			nvgRestore(args.vg);
 		} else {
-			nvgBeginPath(args.vg);
-			nvgRect(args.vg, 0, 0, w, h);
-			nvgFillColor(args.vg, nvgRGB(14, 14, 18));
-			nvgFill(args.vg);
+			nvgBeginPath(args.vg); nvgRect(args.vg, 0, 0, w, h);
+			nvgFillColor(args.vg, nvgRGB(12, 12, 16)); nvgFill(args.vg);
 		}
 
-		// Eurorack case frame around all modules
-		// ModuleContainer is 3rd child of rack (after RailWidget + our RackBgWidget)
+		// ── Eurorack case frame ────────────────────────────────────────────
 		auto& rchildren = APP->scene->rack->children;
-		widget::Widget* moduleContainer = nullptr;
+		widget::Widget* mc = nullptr;
 		if (rchildren.size() >= 3) {
-			auto it2 = rchildren.begin();
-			std::advance(it2, 2);
-			moduleContainer = *it2;
+			auto it = rchildren.begin();
+			std::advance(it, 2);
+			mc = *it;
 		}
-		if (moduleContainer && !moduleContainer->children.empty()) {
-			float pad = 16.f;
-			float x1 = 1e9, y1 = 1e9, x2 = -1e9, y2 = -1e9;
-			for (auto* mw : moduleContainer->children) {
-				x1 = std::min(x1, mw->box.pos.x);
-				y1 = std::min(y1, mw->box.pos.y);
-				x2 = std::max(x2, mw->box.pos.x + mw->box.size.x);
-				y2 = std::max(y2, mw->box.pos.y + mw->box.size.y);
+		if (mc && !mc->children.empty()) {
+			float x1=1e9, y1=1e9, x2=-1e9, y2=-1e9;
+			for (auto* c : mc->children) {
+				x1 = std::min(x1, c->box.pos.x);
+				y1 = std::min(y1, c->box.pos.y);
+				x2 = std::max(x2, c->box.pos.x + c->box.size.x);
+				y2 = std::max(y2, c->box.pos.y + c->box.size.y);
 			}
-			x1 -= pad; y1 -= pad; x2 += pad; y2 += pad;
-			float fw = x2 - x1, fh = y2 - y1;
+			x1-=pad; y1-=pad-4; x2+=pad; y2+=pad-4;
+			float fw = x2-x1, fh = y2-y1;
 
 			// Case shadow
 			nvgBeginPath(args.vg);
-			nvgRoundedRect(args.vg, x1 + 4, y1 + 4, fw, fh, 6.f);
-			nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 120));
+			nvgRoundedRect(args.vg, x1+5, y1+5, fw, fh, 8.f);
+			nvgFillColor(args.vg, nvgRGBA(0,0,0,100));
 			nvgFill(args.vg);
 
-			// Case body (dark semi-transparent)
+			// Top rail
 			nvgBeginPath(args.vg);
-			nvgRoundedRect(args.vg, x1, y1, fw, fh, 6.f);
-			nvgFillColor(args.vg, nvgRGBA(12, 12, 16, 210));
+			nvgRoundedRect(args.vg, x1, y1, fw, railH, 6.f);
+			nvgFillColor(args.vg, nvgRGBAf(railColor.r, railColor.g, railColor.b, 0.92f));
 			nvgFill(args.vg);
 
-			// Case border
+			// Bottom rail
 			nvgBeginPath(args.vg);
-			nvgRoundedRect(args.vg, x1, y1, fw, fh, 6.f);
-			nvgStrokeColor(args.vg, nvgRGB(55, 55, 65));
-			nvgStrokeWidth(args.vg, 2.f);
+			nvgRoundedRect(args.vg, x1, y2-railH, fw, railH, 6.f);
+			nvgFillColor(args.vg, nvgRGBAf(railColor.r, railColor.g, railColor.b, 0.92f));
+			nvgFill(args.vg);
+
+			// Left strip
+			nvgBeginPath(args.vg);
+			nvgRect(args.vg, x1, y1+railH, 6.f, fh-railH*2);
+			nvgFillColor(args.vg, nvgRGBAf(caseColor.r, caseColor.g, caseColor.b, 0.92f));
+			nvgFill(args.vg);
+
+			// Right strip
+			nvgBeginPath(args.vg);
+			nvgRect(args.vg, x2-6.f, y1+railH, 6.f, fh-railH*2);
+			nvgFillColor(args.vg, nvgRGBAf(caseColor.r, caseColor.g, caseColor.b, 0.92f));
+			nvgFill(args.vg);
+
+			// Outer border
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, x1, y1, fw, fh, 8.f);
+			nvgStrokeColor(args.vg, borderColor);
+			nvgStrokeWidth(args.vg, 1.5f);
 			nvgStroke(args.vg);
-
-			// Top rail strip
-			nvgBeginPath(args.vg);
-			nvgRoundedRect(args.vg, x1, y1, fw, pad, 6.f);
-			nvgFillColor(args.vg, nvgRGB(22, 22, 28));
-			nvgFill(args.vg);
-
-			// Bottom rail strip
-			nvgBeginPath(args.vg);
-			nvgRect(args.vg, x1, y2 - pad, fw, pad);
-			nvgFillColor(args.vg, nvgRGB(22, 22, 28));
-			nvgFill(args.vg);
 		}
 	}
 };
+
+// ── Module ────────────────────────────────────────────────────────────────────
 
 struct PureDreams : Module {
 	enum ParamId  { PREV_PARAM, NEXT_PARAM, PARAMS_LEN };
 	enum InputId  { INPUTS_LEN };
 	enum OutputId { OUTPUTS_LEN };
 	enum LightId  { LIGHTS_LEN };
+
+	dsp::BooleanTrigger prevTrig, nextTrig;
+
+	// Communicated to render thread via Widget::step()
+	std::atomic<bool> requestNext{false}, requestPrev{false};
+
+	// Case appearance (serialised)
+	int caseR=18, caseG=18, caseB=22;
+	int railR=26, railG=26, railB=32;
+
 	PureDreams() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		configButton(PREV_PARAM, "Prev preset");
 		configButton(NEXT_PARAM, "Next preset");
 	}
-	void process(const ProcessArgs&) override {}
+
+	void process(const ProcessArgs&) override {
+		if (nextTrig.process(params[NEXT_PARAM].getValue() > 0.f)) requestNext = true;
+		if (prevTrig.process(params[PREV_PARAM].getValue() > 0.f)) requestPrev = true;
+	}
+
+	json_t* dataToJson() override {
+		json_t* r = json_object();
+		json_object_set_new(r, "caseR", json_integer(caseR));
+		json_object_set_new(r, "caseG", json_integer(caseG));
+		json_object_set_new(r, "caseB", json_integer(caseB));
+		json_object_set_new(r, "railR", json_integer(railR));
+		json_object_set_new(r, "railG", json_integer(railG));
+		json_object_set_new(r, "railB", json_integer(railB));
+		return r;
+	}
+	void dataFromJson(json_t* r) override {
+		auto gi = [&](const char* k, int def) {
+			json_t* v = json_object_get(r, k);
+			return v ? (int)json_integer_value(v) : def;
+		};
+		caseR=gi("caseR",18); caseG=gi("caseG",18); caseB=gi("caseB",22);
+		railR=gi("railR",26); railG=gi("railG",26); railB=gi("railB",32);
+	}
 };
 
+// ── Widget ────────────────────────────────────────────────────────────────────
+
 struct PureDreamsWidget : ModuleWidget {
-	PDWindow* pdWin = nullptr;
+	PDWindow*     pdWin  = nullptr;
 	RackBgWidget* rackBg = nullptr;
 
 	PureDreamsWidget(PureDreams* module) {
@@ -138,17 +201,13 @@ struct PureDreamsWidget : ModuleWidget {
 		box.size = Vec(2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT);
 
 		if (module) {
-			pdWin = new PDWindow();
+			pdWin  = new PDWindow();
 			pdWin->open();
-
 			rackBg = new RackBgWidget(pdWin);
-
-			// Insert at position 1: after RailWidget, before ModuleContainer
-			// This makes it draw before all modules.
-			auto& children = APP->scene->rack->children;
-			auto it = children.begin();
-			if (!children.empty()) std::advance(it, 1);
-			children.insert(it, rackBg);
+			auto& ch = APP->scene->rack->children;
+			auto it = ch.begin();
+			if (!ch.empty()) std::advance(it, 1);
+			ch.insert(it, rackBg);
 			rackBg->parent = APP->scene->rack;
 		}
 
@@ -160,18 +219,19 @@ struct PureDreamsWidget : ModuleWidget {
 	}
 
 	~PureDreamsWidget() {
-		if (rackBg) {
-			APP->scene->rack->removeChild(rackBg);
-			delete rackBg;
-		}
-		if (pdWin) { pdWin->close(); delete pdWin; }
+		if (rackBg) { APP->scene->rack->removeChild(rackBg); delete rackBg; }
+		if (pdWin)  { pdWin->close(); delete pdWin; }
 	}
 
 	void step() override {
 		PureDreams* m = dynamic_cast<PureDreams*>(this->module);
 		if (m && pdWin) {
-			if (m->params[PureDreams::NEXT_PARAM].getValue() > 0.f) pdWin->requestNext = true;
-			if (m->params[PureDreams::PREV_PARAM].getValue() > 0.f) pdWin->requestPrev = true;
+			if (m->requestNext.exchange(false)) pdWin->requestNext = true;
+			if (m->requestPrev.exchange(false)) pdWin->requestPrev = true;
+			if (rackBg) {
+				rackBg->caseColor   = nvgRGB(m->caseR, m->caseG, m->caseB);
+				rackBg->railColor   = nvgRGB(m->railR, m->railG, m->railB);
+			}
 		}
 		ModuleWidget::step();
 	}
@@ -179,14 +239,63 @@ struct PureDreamsWidget : ModuleWidget {
 	void draw(const DrawArgs& args) override {
 		float w = box.size.x, h = box.size.y;
 		nvgBeginPath(args.vg); nvgRect(args.vg, 0, 0, w, h);
-		nvgFillColor(args.vg, nvgRGB(10, 10, 14)); nvgFill(args.vg);
+		nvgFillColor(args.vg, nvgRGB(10,10,14)); nvgFill(args.vg);
 		nvgSave(args.vg);
 		nvgTranslate(args.vg, w/2.f, h/2.f); nvgRotate(args.vg, -M_PI/2.f);
-		nvgFontSize(args.vg, 8.f); nvgFillColor(args.vg, nvgRGB(80, 80, 100));
+		nvgFontSize(args.vg, 8.f); nvgFillColor(args.vg, nvgRGB(80,80,100));
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER|NVG_ALIGN_MIDDLE);
 		nvgText(args.vg, 0, 0, "PURE DREAMS", nullptr);
 		nvgRestore(args.vg);
 		ModuleWidget::draw(args);
+	}
+
+	void appendContextMenu(Menu* menu) override {
+		PureDreams* m = dynamic_cast<PureDreams*>(this->module);
+		if (!m) return;
+
+		menu->addChild(new MenuSeparator);
+		menu->addChild(createMenuLabel("Case Colour"));
+
+		struct ColorItem : MenuItem {
+			PureDreams* m; int r, g, b; bool rail;
+			void onAction(const ActionEvent&) override {
+				if (rail) { m->railR=r; m->railG=g; m->railB=b; }
+				else       { m->caseR=r; m->caseG=g; m->caseB=b; }
+			}
+		};
+
+		auto addColor = [&](const char* name, int r, int g, int b, bool rail) {
+			auto* c = new ColorItem;
+			c->text = name; c->m = m; c->r=r; c->g=g; c->b=b; c->rail=rail;
+			menu->addChild(c);
+		};
+
+		menu->addChild(createMenuLabel("  Rails"));
+		addColor("    Dark (default)", 26,26,32, true);
+		addColor("    Charcoal",       40,40,48, true);
+		addColor("    Midnight blue",  15,20,40, true);
+		addColor("    Gunmetal",       45,50,55, true);
+
+		menu->addChild(createMenuLabel("  Side strips"));
+		addColor("    Near black (default)", 18,18,22, false);
+		addColor("    Dark blue",            12,16,28, false);
+		addColor("    Dark green",           12,22,14, false);
+		addColor("    Dark red",             28,12,12, false);
+
+		menu->addChild(new MenuSeparator);
+		menu->addChild(createMenuLabel("Presets (← →)"));
+
+		static std::vector<std::string> presets = getPresetNames();
+		int count = 0;
+		for (auto& name : presets) {
+			if (count++ > 40) { menu->addChild(createMenuLabel("  ...")); break; }
+			std::string n = name;
+			PDWindow* pw = pdWin;
+			int idx = count - 1;
+			menu->addChild(createMenuItem(std::string("  ") + n, "", [=]() {
+				if (pw) pw->requestPreset = idx;
+			}));
+		}
 	}
 };
 

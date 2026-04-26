@@ -88,6 +88,8 @@ void PDWindow::loop() {
 	while (running) {
 		if (requestNext.exchange(false)) pm->selectNext(true);
 		if (requestPrev.exchange(false)) pm->selectPrevious(true);
+		int preset = requestPreset.exchange(-1);
+		if (preset >= 0) pm->selectPreset((unsigned)preset, true);
 
 		pm->renderFrame();
 

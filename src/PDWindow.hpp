@@ -24,6 +24,7 @@ struct PDWindow {
 	int pixelW = 1920;
 	int pixelH = 1080;
 	bool pixelsDirty = false;
+	std::atomic<int> requestPreset{-1};
 
 	void open();
 	void close();
