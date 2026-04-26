@@ -14,6 +14,11 @@
 
 void PDWindow::open() {
 	pixels.resize(pixelW * pixelH * 4, 0);
+	// Pre-fill with dark colour so something shows before projectM starts
+	for (int i = 0; i < pixelW * pixelH * 4; i += 4) {
+		pixels[i+0] = 10; pixels[i+1] = 10; pixels[i+2] = 14; pixels[i+3] = 255;
+	}
+	pixelsDirty = true;
 
 	dispatch_async(dispatch_get_main_queue(), ^{
 		if (!wantOpen) return;

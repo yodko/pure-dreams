@@ -34,10 +34,11 @@ struct RackBgWidget : widget::Widget {
 
 	// Case appearance
 	NVGcolor caseColor     = nvgRGB(18, 18, 22);
-	NVGcolor railColor     = nvgRGB(26, 26, 32);
-	NVGcolor borderColor   = nvgRGB(55, 55, 68);
+	NVGcolor railColor     = nvgRGB(30, 30, 36);
+	NVGcolor borderColor   = nvgRGB(60, 60, 72);
 	float    railH         = 18.f;
 	float    pad           = 14.f;
+	float    brightness    = 0.85f;
 
 	RackBgWidget(PDWindow* w) : pdWin(w) {
 		box.pos  = Vec(0, 0);
@@ -63,6 +64,7 @@ struct RackBgWidget : widget::Widget {
 			}
 		}
 
+
 		if (nvgImg >= 0) {
 			float cx = args.clipBox.pos.x, cy = args.clipBox.pos.y;
 			float cw = args.clipBox.size.x, ch = args.clipBox.size.y;
@@ -74,7 +76,7 @@ struct RackBgWidget : widget::Widget {
 			nvgSave(args.vg);
 			nvgTranslate(args.vg, 0, cy + ch);
 			nvgScale(args.vg, 1.f, -1.f);
-			NVGpaint p = nvgImagePattern(args.vg, ox, (ch-ph)/2.f, pw, ph, 0, nvgImg, 1.f);
+			NVGpaint p = nvgImagePattern(args.vg, ox, (ch-ph)/2.f, pw, ph, 0, nvgImg, this->brightness);
 			nvgBeginPath(args.vg); nvgRect(args.vg, cx, 0, cw, ch);
 			nvgFillPaint(args.vg, p); nvgFill(args.vg);
 			nvgRestore(args.vg);
@@ -102,11 +104,14 @@ struct RackBgWidget : widget::Widget {
 			x1-=pad; y1-=pad-4; x2+=pad; y2+=pad-4;
 			float fw = x2-x1, fh = y2-y1;
 
-			// Case shadow
-			nvgBeginPath(args.vg);
-			nvgRoundedRect(args.vg, x1+5, y1+5, fw, fh, 8.f);
-			nvgFillColor(args.vg, nvgRGBA(0,0,0,100));
-			nvgFill(args.vg);
+			// Drop shadow (layered for soft look)
+			for (int i = 3; i >= 1; i--) {
+				float off = i * 6.f;
+				nvgBeginPath(args.vg);
+				nvgRoundedRect(args.vg, x1+off, y1+off, fw, fh, 8.f);
+				nvgFillColor(args.vg, nvgRGBA(0, 0, 0, (int)(60 / i)));
+				nvgFill(args.vg);
+			}
 
 			// Top rail
 			nvgBeginPath(args.vg);
@@ -145,29 +150,27 @@ struct RackBgWidget : widget::Widget {
 // ── Module ────────────────────────────────────────────────────────────────────
 
 struct PureDreams : Module {
-	enum ParamId  { PREV_PARAM, NEXT_PARAM, PARAMS_LEN };
+	enum ParamId  { PREV_PARAM, NEXT_PARAM, BRIGHTNESS_PARAM, PARAMS_LEN };
 	enum InputId  { INPUTS_LEN };
 	enum OutputId { OUTPUTS_LEN };
 	enum LightId  { LIGHTS_LEN };
 
-	dsp::BooleanTrigger prevTrig, nextTrig;
-
-	// Communicated to render thread via Widget::step()
+	dsp::SchmittTrigger prevTrig, nextTrig;
 	std::atomic<bool> requestNext{false}, requestPrev{false};
 
-	// Case appearance (serialised)
 	int caseR=18, caseG=18, caseB=22;
-	int railR=26, railG=26, railB=32;
+	int railR=30, railG=30, railB=36;
 
 	PureDreams() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		configButton(PREV_PARAM, "Prev preset");
 		configButton(NEXT_PARAM, "Next preset");
+		configParam(BRIGHTNESS_PARAM, 0.f, 1.f, 0.85f, "Brightness");
 	}
 
 	void process(const ProcessArgs&) override {
-		if (nextTrig.process(params[NEXT_PARAM].getValue() > 0.f)) requestNext = true;
-		if (prevTrig.process(params[PREV_PARAM].getValue() > 0.f)) requestPrev = true;
+		if (nextTrig.process(params[NEXT_PARAM].getValue())) requestNext = true;
+		if (prevTrig.process(params[PREV_PARAM].getValue())) requestPrev = true;
 	}
 
 	json_t* dataToJson() override {
@@ -186,7 +189,7 @@ struct PureDreams : Module {
 			return v ? (int)json_integer_value(v) : def;
 		};
 		caseR=gi("caseR",18); caseG=gi("caseG",18); caseB=gi("caseB",22);
-		railR=gi("railR",26); railG=gi("railG",26); railB=gi("railB",32);
+		railR=gi("railR",30); railG=gi("railG",30); railB=gi("railB",36);
 	}
 };
 
@@ -213,9 +216,11 @@ struct PureDreamsWidget : ModuleWidget {
 
 		float cx = box.size.x / 2.f;
 		addParam(createParamCentered<VCVBezel>(
-			Vec(cx, RACK_GRID_HEIGHT/2.f - 30.f), module, PureDreams::PREV_PARAM));
+			Vec(cx, RACK_GRID_HEIGHT/2.f - 50.f), module, PureDreams::PREV_PARAM));
 		addParam(createParamCentered<VCVBezel>(
-			Vec(cx, RACK_GRID_HEIGHT/2.f + 30.f), module, PureDreams::NEXT_PARAM));
+			Vec(cx, RACK_GRID_HEIGHT/2.f - 10.f), module, PureDreams::NEXT_PARAM));
+		addParam(createParamCentered<Trimpot>(
+			Vec(cx, RACK_GRID_HEIGHT/2.f + 40.f), module, PureDreams::BRIGHTNESS_PARAM));
 	}
 
 	~PureDreamsWidget() {
@@ -229,8 +234,9 @@ struct PureDreamsWidget : ModuleWidget {
 			if (m->requestNext.exchange(false)) pdWin->requestNext = true;
 			if (m->requestPrev.exchange(false)) pdWin->requestPrev = true;
 			if (rackBg) {
-				rackBg->caseColor   = nvgRGB(m->caseR, m->caseG, m->caseB);
-				rackBg->railColor   = nvgRGB(m->railR, m->railG, m->railB);
+				rackBg->caseColor  = nvgRGB(m->caseR, m->caseG, m->caseB);
+				rackBg->railColor  = nvgRGB(m->railR, m->railG, m->railB);
+				rackBg->brightness = m->params[PureDreams::BRIGHTNESS_PARAM].getValue();
 			}
 		}
 		ModuleWidget::step();
@@ -271,16 +277,19 @@ struct PureDreamsWidget : ModuleWidget {
 		};
 
 		menu->addChild(createMenuLabel("  Rails"));
-		addColor("    Dark (default)", 26,26,32, true);
-		addColor("    Charcoal",       40,40,48, true);
-		addColor("    Midnight blue",  15,20,40, true);
-		addColor("    Gunmetal",       45,50,55, true);
+		addColor("    Default",        30, 30, 36, true);
+		addColor("    Charcoal",       55, 55, 65, true);
+		addColor("    Midnight blue",  20, 28, 60, true);
+		addColor("    Gunmetal",       60, 65, 70, true);
+		addColor("    Gold",           80, 65, 20, true);
+		addColor("    Bronze",         70, 50, 25, true);
 
 		menu->addChild(createMenuLabel("  Side strips"));
-		addColor("    Near black (default)", 18,18,22, false);
-		addColor("    Dark blue",            12,16,28, false);
-		addColor("    Dark green",           12,22,14, false);
-		addColor("    Dark red",             28,12,12, false);
+		addColor("    Default",        18, 18, 22, false);
+		addColor("    Dark blue",      14, 18, 40, false);
+		addColor("    Dark green",     14, 30, 16, false);
+		addColor("    Dark red",       36, 14, 14, false);
+		addColor("    Dark purple",    28, 14, 40, false);
 
 		menu->addChild(new MenuSeparator);
 		menu->addChild(createMenuLabel("Presets (← →)"));
