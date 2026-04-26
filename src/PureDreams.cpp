@@ -8,19 +8,22 @@
 static const char* PRESET_DIR =
 	"/opt/homebrew/Cellar/projectm/3.1.12/share/projectM/presets";
 
-static std::vector<std::string> loadPresetNames() {
-	std::vector<std::string> v;
-	DIR* d = opendir(PRESET_DIR);
-	if (!d) return v;
-	struct dirent* e;
-	while ((e = readdir(d))) {
-		std::string n = e->d_name;
-		if (n.size() > 5 && n.substr(n.size()-5) == ".milk")
-			v.push_back(n.substr(0, n.size()-5));
-	}
-	closedir(d);
-	std::sort(v.begin(), v.end());
-	return v;
+static std::vector<std::string>& allPresets() {
+	static std::vector<std::string> ps = []() {
+		std::vector<std::string> v;
+		DIR* d = opendir(PRESET_DIR);
+		if (!d) return v;
+		struct dirent* e;
+		while ((e = readdir(d))) {
+			std::string n = e->d_name;
+			if (n.size() > 5 && n.substr(n.size()-5) == ".milk")
+				v.push_back(n.substr(0, n.size()-5));
+		}
+		closedir(d);
+		std::sort(v.begin(), v.end());
+		return v;
+	}();
+	return ps;
 }
 
 // ── RackBgWidget ──────────────────────────────────────────────────────────────
@@ -53,7 +56,7 @@ struct RackBgWidget : widget::Widget {
 			}
 		}
 
-		// Always fill solid dark first — prevents VCV grey showing through at low brightness
+		// Always fill dark base first
 		nvgBeginPath(args.vg); nvgRect(args.vg, 0, 0, w, h);
 		nvgFillColor(args.vg, nvgRGB(12, 12, 16)); nvgFill(args.vg);
 
@@ -73,7 +76,6 @@ struct RackBgWidget : widget::Widget {
 			nvgRestore(args.vg);
 		}
 	}
-
 };
 
 // ── Module ────────────────────────────────────────────────────────────────────
@@ -86,7 +88,7 @@ struct PureDreams : Module {
 
 	dsp::SchmittTrigger nextTrig, prevTrig;
 	PDWindow* pdWin = nullptr;
-	int savedPreset = 0; // persisted across sessions
+	std::string savedPresetName; // saved by name for reliability
 
 	PureDreams() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -98,12 +100,12 @@ struct PureDreams : Module {
 
 	json_t* dataToJson() override {
 		json_t* r = json_object();
-		json_object_set_new(r, "preset", json_integer(savedPreset));
+		json_object_set_new(r, "presetName", json_string(savedPresetName.c_str()));
 		return r;
 	}
 	void dataFromJson(json_t* r) override {
-		json_t* v = json_object_get(r, "preset");
-		if (v) savedPreset = (int)json_integer_value(v);
+		json_t* v = json_object_get(r, "presetName");
+		if (v && json_is_string(v)) savedPresetName = json_string_value(v);
 	}
 
 	void process(const ProcessArgs&) override {
@@ -123,18 +125,16 @@ struct PresetItem : MenuItem {
 	ui::TextField* searchField;
 
 	void onAction(const ActionEvent&) override {
-		if (pdWin) pdWin->requestPreset = index;
-		if (module) module->savedPreset = index;
+		if (pdWin)   pdWin->requestPreset = index;
+		if (module)  module->savedPresetName = presetName;
 	}
 
 	void step() override {
-		// Filter by search
 		if (searchField) {
-			std::string query = searchField->text;
-			std::string name  = presetName;
-			std::transform(query.begin(), query.end(), query.begin(), ::tolower);
-			std::transform(name.begin(),  name.end(),  name.begin(),  ::tolower);
-			visible = query.empty() || name.find(query) != std::string::npos;
+			std::string q = searchField->text, n = presetName;
+			std::transform(q.begin(), q.end(), q.begin(), ::tolower);
+			std::transform(n.begin(), n.end(), n.begin(), ::tolower);
+			visible = q.empty() || n.find(q) != std::string::npos;
 		}
 		MenuItem::step();
 	}
@@ -144,13 +144,8 @@ struct PresetItem : MenuItem {
 
 struct PureDreamsWidget : ModuleWidget {
 	PDWindow*     pdWin    = nullptr;
-	bool          restored = false; // have we restored the saved preset?
-	RackBgWidget* rackBg = nullptr;
-
-	static std::vector<std::string>& presets() {
-		static std::vector<std::string> p = loadPresetNames();
-		return p;
-	}
+	RackBgWidget* rackBg   = nullptr;
+	bool          restored = false;
 
 	PureDreamsWidget(PureDreams* module) {
 		setModule(module);
@@ -165,6 +160,7 @@ struct PureDreamsWidget : ModuleWidget {
 			if (!ch.empty()) std::advance(it, 1);
 			ch.insert(it, rackBg);
 			rackBg->parent = APP->scene->rack;
+			module->pdWin = pdWin;
 		}
 
 		float cx = box.size.x / 2.f;
@@ -176,9 +172,6 @@ struct PureDreamsWidget : ModuleWidget {
 			Vec(cx, RACK_GRID_HEIGHT/2.f + 45.f), module, PureDreams::BRIGHTNESS_PARAM));
 		addInput(createInputCentered<PJ301MPort>(
 			Vec(cx, RACK_GRID_HEIGHT - 30.f), module, PureDreams::AUDIO_INPUT));
-
-		// Give the module a pointer to pdWin for audio feeding
-		if (module && pdWin) module->pdWin = pdWin;
 	}
 
 	~PureDreamsWidget() {
@@ -193,29 +186,34 @@ struct PureDreamsWidget : ModuleWidget {
 	void step() override {
 		PureDreams* m = dynamic_cast<PureDreams*>(this->module);
 		if (m && pdWin) {
-			// SchmittTrigger — same pattern as LFMEmbedded
-			if (m->nextTrig.process(m->params[PureDreams::NEXT_PARAM].getValue()) > 0.f)
+			if (m->nextTrig.process(m->params[PureDreams::NEXT_PARAM].getValue()) > 0.f) {
 				pdWin->requestNext = true;
-			if (m->prevTrig.process(m->params[PureDreams::PREV_PARAM].getValue()) > 0.f)
+			}
+			if (m->prevTrig.process(m->params[PureDreams::PREV_PARAM].getValue()) > 0.f) {
 				pdWin->requestPrev = true;
+			}
 			if (rackBg)
 				rackBg->brightness = m->params[PureDreams::BRIGHTNESS_PARAM].getValue();
 
-			// Restore saved preset once projectM is ready (first frame with pixels)
+			// Restore saved preset once projectM is ready
 			if (!restored && pdWin->pixelsDirty) {
 				restored = true;
-				if (m->savedPreset > 0)
-					pdWin->requestPreset = m->savedPreset;
+				if (!m->savedPresetName.empty()) {
+					auto& ps = allPresets();
+					auto it = std::find(ps.begin(), ps.end(), m->savedPresetName);
+					if (it != ps.end()) {
+						int idx = (int)std::distance(ps.begin(), it);
+						pdWin->requestPreset = idx;
+					}
+				}
 			}
 
-			// Track current preset index from the name lookup
+			// Keep savedPresetName in sync with what's playing
 			{
 				std::lock_guard<std::mutex> nl(pdWin->nameMutex);
-				if (!pdWin->currentPresetName.empty()) {
-					auto& ps = presets();
-					auto it = std::find(ps.begin(), ps.end(), pdWin->currentPresetName);
-					if (it != ps.end())
-						m->savedPreset = (int)std::distance(ps.begin(), it);
+				if (!pdWin->currentPresetName.empty() &&
+				    pdWin->currentPresetName != m->savedPresetName) {
+					m->savedPresetName = pdWin->currentPresetName;
 				}
 			}
 		}
@@ -227,17 +225,31 @@ struct PureDreamsWidget : ModuleWidget {
 		nvgBeginPath(args.vg); nvgRect(args.vg, 0, 0, w, h);
 		nvgFillColor(args.vg, nvgRGB(10,10,14)); nvgFill(args.vg);
 
-		// Current preset name (shortened)
+		PureDreams* m = dynamic_cast<PureDreams*>(this->module);
+
+		// Preset counter: "042 / 4188"
+		if (pdWin && m) {
+			int idx   = pdWin->currentPresetIndex.load();
+			int total = (int)allPresets().size();
+			char buf[32];
+			snprintf(buf, sizeof(buf), "%d / %d", idx + 1, total);
+			nvgFontSize(args.vg, 8.f);
+			nvgFillColor(args.vg, nvgRGB(120, 120, 150));
+			nvgTextAlign(args.vg, NVG_ALIGN_CENTER|NVG_ALIGN_MIDDLE);
+			nvgText(args.vg, w/2.f, h/2.f + 22.f, buf, nullptr);
+		}
+
+		// Current preset name (rotated)
 		if (pdWin) {
 			std::lock_guard<std::mutex> nl(pdWin->nameMutex);
 			if (!pdWin->currentPresetName.empty()) {
 				std::string name = pdWin->currentPresetName;
-				if (name.size() > 18) name = name.substr(0,17) + "…";
+				if (name.size() > 16) name = name.substr(0,15) + "…";
 				nvgSave(args.vg);
-				nvgTranslate(args.vg, w/2.f, h/2.f + 80.f);
+				nvgTranslate(args.vg, w/2.f, h/2.f + 75.f);
 				nvgRotate(args.vg, -M_PI/2.f);
 				nvgFontSize(args.vg, 7.f);
-				nvgFillColor(args.vg, nvgRGB(100,100,130));
+				nvgFillColor(args.vg, nvgRGB(90, 90, 115));
 				nvgTextAlign(args.vg, NVG_ALIGN_CENTER|NVG_ALIGN_MIDDLE);
 				nvgText(args.vg, 0, 0, name.c_str(), nullptr);
 				nvgRestore(args.vg);
@@ -257,8 +269,6 @@ struct PureDreamsWidget : ModuleWidget {
 
 	void appendContextMenu(Menu* menu) override {
 		menu->addChild(new MenuSeparator);
-
-		// Searchable preset list
 		menu->addChild(createMenuLabel("Presets"));
 
 		auto* search = createWidget<ui::TextField>(Vec(0,0));
@@ -267,14 +277,15 @@ struct PureDreamsWidget : ModuleWidget {
 		menu->addChild(search);
 
 		PureDreams* m = dynamic_cast<PureDreams*>(this->module);
-		auto& ps = presets();
+		auto& ps = allPresets();
+		int cur = pdWin ? pdWin->currentPresetIndex.load() : -1;
 		for (int i = 0; i < (int)ps.size(); i++) {
-			auto* item       = new PresetItem;
-			item->text       = ps[i];
-			item->pdWin      = pdWin;
-			item->module     = m;
-			item->index      = i;
-			item->presetName = ps[i];
+			auto* item        = new PresetItem;
+			item->text        = (i == cur ? "► " : "  ") + ps[i];
+			item->pdWin       = pdWin;
+			item->module      = m;
+			item->index       = i;
+			item->presetName  = ps[i];
 			item->searchField = search;
 			menu->addChild(item);
 		}
