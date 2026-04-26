@@ -106,9 +106,9 @@ void PDWindow::loop() {
 	projectM::Settings s;
 	s.windowWidth  = pixelW;
 	s.windowHeight = pixelH;
-	s.presetURL    = "/opt/homebrew/Cellar/projectm/3.1.12/share/projectM/presets";
-	s.shuffleEnabled = true;
-	s.presetDuration = 30;
+	s.presetURL       = "/opt/homebrew/Cellar/projectm/3.1.12/share/projectM/presets";
+	s.shuffleEnabled  = false;  // don't auto-cycle
+	s.presetDuration  = 999999; // effectively infinite
 	s.fps = 60; s.meshX = 32; s.meshY = 24;
 	projectM* pm = new projectM(s);
 

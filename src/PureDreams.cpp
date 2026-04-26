@@ -86,6 +86,7 @@ struct PureDreams : Module {
 
 	dsp::SchmittTrigger nextTrig, prevTrig;
 	PDWindow* pdWin = nullptr;
+	int savedPreset = 0; // persisted across sessions
 
 	PureDreams() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -93,6 +94,16 @@ struct PureDreams : Module {
 		configButton(NEXT_PARAM, "Next preset");
 		configParam(BRIGHTNESS_PARAM, 0.f, 1.f, 1.f, "Brightness");
 		configInput(AUDIO_INPUT, "Audio");
+	}
+
+	json_t* dataToJson() override {
+		json_t* r = json_object();
+		json_object_set_new(r, "preset", json_integer(savedPreset));
+		return r;
+	}
+	void dataFromJson(json_t* r) override {
+		json_t* v = json_object_get(r, "preset");
+		if (v) savedPreset = (int)json_integer_value(v);
 	}
 
 	void process(const ProcessArgs&) override {
@@ -105,13 +116,15 @@ struct PureDreams : Module {
 // ── Searchable preset menu item ───────────────────────────────────────────────
 
 struct PresetItem : MenuItem {
-	PDWindow* pdWin;
+	PDWindow*   pdWin;
+	PureDreams* module;
 	int index;
 	std::string presetName;
 	ui::TextField* searchField;
 
 	void onAction(const ActionEvent&) override {
 		if (pdWin) pdWin->requestPreset = index;
+		if (module) module->savedPreset = index;
 	}
 
 	void step() override {
@@ -130,7 +143,8 @@ struct PresetItem : MenuItem {
 // ── Widget ────────────────────────────────────────────────────────────────────
 
 struct PureDreamsWidget : ModuleWidget {
-	PDWindow*     pdWin  = nullptr;
+	PDWindow*     pdWin    = nullptr;
+	bool          restored = false; // have we restored the saved preset?
 	RackBgWidget* rackBg = nullptr;
 
 	static std::vector<std::string>& presets() {
@@ -186,6 +200,24 @@ struct PureDreamsWidget : ModuleWidget {
 				pdWin->requestPrev = true;
 			if (rackBg)
 				rackBg->brightness = m->params[PureDreams::BRIGHTNESS_PARAM].getValue();
+
+			// Restore saved preset once projectM is ready (first frame with pixels)
+			if (!restored && pdWin->pixelsDirty) {
+				restored = true;
+				if (m->savedPreset > 0)
+					pdWin->requestPreset = m->savedPreset;
+			}
+
+			// Track current preset index from the name lookup
+			{
+				std::lock_guard<std::mutex> nl(pdWin->nameMutex);
+				if (!pdWin->currentPresetName.empty()) {
+					auto& ps = presets();
+					auto it = std::find(ps.begin(), ps.end(), pdWin->currentPresetName);
+					if (it != ps.end())
+						m->savedPreset = (int)std::distance(ps.begin(), it);
+				}
+			}
 		}
 		ModuleWidget::step();
 	}
@@ -234,12 +266,14 @@ struct PureDreamsWidget : ModuleWidget {
 		search->box.size.x  = 200;
 		menu->addChild(search);
 
+		PureDreams* m = dynamic_cast<PureDreams*>(this->module);
 		auto& ps = presets();
 		for (int i = 0; i < (int)ps.size(); i++) {
-			auto* item      = new PresetItem;
-			item->text      = ps[i];
-			item->pdWin     = pdWin;
-			item->index     = i;
+			auto* item       = new PresetItem;
+			item->text       = ps[i];
+			item->pdWin      = pdWin;
+			item->module     = m;
+			item->index      = i;
 			item->presetName = ps[i];
 			item->searchField = search;
 			menu->addChild(item);
