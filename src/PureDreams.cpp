@@ -62,11 +62,18 @@ struct RackBgWidget : widget::Widget {
 		}
 
 		// Eurorack case frame around all modules
-		auto mws = APP->scene->rack->getModuleWidgets();
-		if (!mws.empty()) {
+		// ModuleContainer is 3rd child of rack (after RailWidget + our RackBgWidget)
+		auto& rchildren = APP->scene->rack->children;
+		widget::Widget* moduleContainer = nullptr;
+		if (rchildren.size() >= 3) {
+			auto it2 = rchildren.begin();
+			std::advance(it2, 2);
+			moduleContainer = *it2;
+		}
+		if (moduleContainer && !moduleContainer->children.empty()) {
 			float pad = 16.f;
 			float x1 = 1e9, y1 = 1e9, x2 = -1e9, y2 = -1e9;
-			for (auto* mw : mws) {
+			for (auto* mw : moduleContainer->children) {
 				x1 = std::min(x1, mw->box.pos.x);
 				y1 = std::min(y1, mw->box.pos.y);
 				x2 = std::max(x2, mw->box.pos.x + mw->box.size.x);
