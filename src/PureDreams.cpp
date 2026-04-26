@@ -81,7 +81,7 @@ struct RackBgWidget : widget::Widget {
 // ── Module ────────────────────────────────────────────────────────────────────
 
 struct PureDreams : Module {
-	enum ParamId  { PREV_PARAM, NEXT_PARAM, BRIGHTNESS_PARAM, PARAMS_LEN };
+	enum ParamId  { PREV_PARAM, NEXT_PARAM, BRIGHTNESS_PARAM, PRESET_IDX_PARAM, PARAMS_LEN };
 	enum InputId  { AUDIO_INPUT, INPUTS_LEN };
 	enum OutputId { OUTPUTS_LEN };
 	enum LightId  { LIGHTS_LEN };
@@ -96,6 +96,7 @@ struct PureDreams : Module {
 		configButton(NEXT_PARAM, "Next preset");
 		configParam(BRIGHTNESS_PARAM, 0.f, 1.f, 1.f, "Brightness");
 		configInput(AUDIO_INPUT, "Audio");
+		configParam(PRESET_IDX_PARAM, 0.f, 9999.f, 0.f, "Preset index");
 	}
 
 	json_t* dataToJson() override {
@@ -188,11 +189,9 @@ struct PureDreamsWidget : ModuleWidget {
 		if (m && pdWin) {
 			if (m->nextTrig.process(m->params[PureDreams::NEXT_PARAM].getValue()) > 0.f) {
 				pdWin->requestNext = true;
-				APP->patch->dirty = true; // mark patch modified
 			}
 			if (m->prevTrig.process(m->params[PureDreams::PREV_PARAM].getValue()) > 0.f) {
 				pdWin->requestPrev = true;
-				APP->patch->dirty = true;
 			}
 			if (rackBg)
 				rackBg->brightness = m->params[PureDreams::BRIGHTNESS_PARAM].getValue();
@@ -210,12 +209,17 @@ struct PureDreamsWidget : ModuleWidget {
 				}
 			}
 
-			// Keep savedPresetName in sync with what's playing
+			// Sync savedPresetName + hidden PRESET_IDX_PARAM (triggers dirty flag)
 			{
 				std::lock_guard<std::mutex> nl(pdWin->nameMutex);
 				if (!pdWin->currentPresetName.empty() &&
 				    pdWin->currentPresetName != m->savedPresetName) {
 					m->savedPresetName = pdWin->currentPresetName;
+					// Update hidden param so VCV detects the change
+					int idx = pdWin->currentPresetIndex.load();
+					float cur = m->params[PureDreams::PRESET_IDX_PARAM].getValue();
+					if ((int)cur != idx)
+						APP->engine->setParamValue(m, PureDreams::PRESET_IDX_PARAM, (float)idx);
 				}
 			}
 		}
