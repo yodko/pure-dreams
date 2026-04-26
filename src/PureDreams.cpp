@@ -55,10 +55,55 @@ struct RackBgWidget : widget::Widget {
 			nvgFill(args.vg);
 			nvgRestore(args.vg);
 		} else {
-			// Dark fallback until projectM is ready
 			nvgBeginPath(args.vg);
 			nvgRect(args.vg, 0, 0, w, h);
 			nvgFillColor(args.vg, nvgRGB(14, 14, 18));
+			nvgFill(args.vg);
+		}
+
+		// Eurorack case frame around all modules
+		auto mws = APP->scene->rack->getModuleWidgets();
+		if (!mws.empty()) {
+			float pad = 16.f;
+			float x1 = 1e9, y1 = 1e9, x2 = -1e9, y2 = -1e9;
+			for (auto* mw : mws) {
+				x1 = std::min(x1, mw->box.pos.x);
+				y1 = std::min(y1, mw->box.pos.y);
+				x2 = std::max(x2, mw->box.pos.x + mw->box.size.x);
+				y2 = std::max(y2, mw->box.pos.y + mw->box.size.y);
+			}
+			x1 -= pad; y1 -= pad; x2 += pad; y2 += pad;
+			float fw = x2 - x1, fh = y2 - y1;
+
+			// Case shadow
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, x1 + 4, y1 + 4, fw, fh, 6.f);
+			nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 120));
+			nvgFill(args.vg);
+
+			// Case body (dark semi-transparent)
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, x1, y1, fw, fh, 6.f);
+			nvgFillColor(args.vg, nvgRGBA(12, 12, 16, 210));
+			nvgFill(args.vg);
+
+			// Case border
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, x1, y1, fw, fh, 6.f);
+			nvgStrokeColor(args.vg, nvgRGB(55, 55, 65));
+			nvgStrokeWidth(args.vg, 2.f);
+			nvgStroke(args.vg);
+
+			// Top rail strip
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, x1, y1, fw, pad, 6.f);
+			nvgFillColor(args.vg, nvgRGB(22, 22, 28));
+			nvgFill(args.vg);
+
+			// Bottom rail strip
+			nvgBeginPath(args.vg);
+			nvgRect(args.vg, x1, y2 - pad, fw, pad);
+			nvgFillColor(args.vg, nvgRGB(22, 22, 28));
 			nvgFill(args.vg);
 		}
 	}
