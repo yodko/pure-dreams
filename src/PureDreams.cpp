@@ -62,10 +62,8 @@ struct RackBgWidget : widget::Widget {
 			float ox = cx + (cw-pw)/2.f;
 			nvgSave(args.vg);
 			nvgTranslate(args.vg, 0, cy+ch); nvgScale(args.vg, 1, -1);
-			// 0–0.5: fade background in; 0.5–1: background full
-			float bgAlpha = std::min(1.f, brightness * 2.f);
 			NVGpaint p = nvgImagePattern(args.vg, ox, (ch-ph)/2.f, pw, ph,
-				0, nvgImg, bgAlpha);
+				0, nvgImg, brightness);
 			nvgBeginPath(args.vg); nvgRect(args.vg, cx, 0, cw, ch);
 			nvgFillPaint(args.vg, p); nvgFill(args.vg);
 			nvgRestore(args.vg);
@@ -75,28 +73,6 @@ struct RackBgWidget : widget::Widget {
 		}
 	}
 
-	void drawLayer(const DrawArgs& args, int layer) override {
-		// Layer 1: overlay projectM ON TOP of modules when brightness > 0.5
-		if (layer != 1 || nvgImg < 0) return;
-		float fgAlpha = (brightness - 0.5f) * 2.f;
-		if (fgAlpha <= 0.01f) return;
-
-		float cx = args.clipBox.pos.x, cy = args.clipBox.pos.y;
-		float cw = args.clipBox.size.x, ch = args.clipBox.size.y;
-		if (cw <= 0 || ch <= 0) return;
-
-		float scale = std::max(cw/(float)pdWin->pixelW, ch/(float)pdWin->pixelH);
-		float pw = pdWin->pixelW*scale, ph = pdWin->pixelH*scale;
-		float ox = cx + (cw-pw)/2.f;
-
-		nvgSave(args.vg);
-		nvgTranslate(args.vg, 0, cy+ch); nvgScale(args.vg, 1, -1);
-		NVGpaint p = nvgImagePattern(args.vg, ox, (ch-ph)/2.f, pw, ph,
-			0, nvgImg, fgAlpha);
-		nvgBeginPath(args.vg); nvgRect(args.vg, cx, 0, cw, ch);
-		nvgFillPaint(args.vg, p); nvgFill(args.vg);
-		nvgRestore(args.vg);
-	}
 };
 
 // ── Module ────────────────────────────────────────────────────────────────────
