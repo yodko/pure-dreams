@@ -106,9 +106,10 @@ void PDWindow::loop() {
 	projectM::Settings s;
 	s.windowWidth  = pixelW;
 	s.windowHeight = pixelH;
-	s.presetURL      = "/opt/homebrew/Cellar/projectm/3.1.12/share/projectM/presets";
-	s.shuffleEnabled = false;  // don't auto-cycle
-	s.presetDuration = 86400;  // 24 hours — effectively stays on one preset
+	// Use subdirectory with only .milk presets — avoids .dylib plugin crashes
+	s.presetURL      = "/opt/homebrew/Cellar/projectm/3.1.12/share/projectM/presets/presets_bltc201";
+	s.shuffleEnabled = false;
+	s.presetDuration = 86400;
 	s.fps = 60; s.meshX = 32; s.meshY = 24;
 	projectM* pm = new projectM(s);
 
@@ -147,5 +148,7 @@ void PDWindow::loop() {
 		[ctx flushBuffer];
 	}
 
+	// Finish all pending GL operations before destroying projectM
+	glFinish();
 	delete pm;
 }

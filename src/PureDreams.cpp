@@ -6,7 +6,7 @@
 #include <dirent.h>
 
 static const char* PRESET_DIR =
-	"/opt/homebrew/Cellar/projectm/3.1.12/share/projectM/presets";
+	"/opt/homebrew/Cellar/projectm/3.1.12/share/projectM/presets/presets_bltc201";
 
 static std::vector<std::string>& allPresets() {
 	static std::vector<std::string> ps = []() {
@@ -188,9 +188,11 @@ struct PureDreamsWidget : ModuleWidget {
 		if (m && pdWin) {
 			if (m->nextTrig.process(m->params[PureDreams::NEXT_PARAM].getValue()) > 0.f) {
 				pdWin->requestNext = true;
+				APP->patch->dirty = true; // mark patch modified
 			}
 			if (m->prevTrig.process(m->params[PureDreams::PREV_PARAM].getValue()) > 0.f) {
 				pdWin->requestPrev = true;
+				APP->patch->dirty = true;
 			}
 			if (rackBg)
 				rackBg->brightness = m->params[PureDreams::BRIGHTNESS_PARAM].getValue();
