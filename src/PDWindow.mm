@@ -111,8 +111,7 @@ void PDWindow::loop() {
 		// Update current preset name
 		unsigned int idx = 0;
 		if (pm->selectedPresetIndex(idx)) {
-			std::string name;
-			pm->getPresetName(idx, name);
+			std::string name = pm->getPresetName(idx);
 			std::lock_guard<std::mutex> nl(nameMutex);
 			currentPresetName = name;
 		}
