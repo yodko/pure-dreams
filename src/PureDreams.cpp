@@ -34,19 +34,23 @@ struct RackBgWidget : widget::Widget {
 		}
 
 		if (nvgImg >= 0) {
-			// Scale image to cover the rack area maintaining aspect ratio
-			float imgW = pdWin->pixelW, imgH = pdWin->pixelH;
-			float scaleX = w / imgW, scaleY = h / imgH;
-			float scale = std::max(scaleX, scaleY);
-			float pw = imgW * scale, ph = imgH * scale;
-			float ox = (w - pw) / 2.f, oy = (h - ph) / 2.f;
+			// Use clipBox — the visible portion of the rack in rack coordinates
+			float cx = args.clipBox.pos.x, cy = args.clipBox.pos.y;
+			float cw = args.clipBox.size.x, ch = args.clipBox.size.y;
+			if (cw <= 0 || ch <= 0) { cw = w; ch = h; cx = 0; cy = 0; }
 
+			float imgW = pdWin->pixelW, imgH = pdWin->pixelH;
+			float scale = std::max(cw / imgW, ch / imgH);
+			float pw = imgW * scale, ph = imgH * scale;
+			float ox = cx + (cw - pw) / 2.f;
+
+			// Y-flip: translate to bottom of clip area, flip, draw
 			nvgSave(args.vg);
-			nvgTranslate(args.vg, 0, h);
+			nvgTranslate(args.vg, 0, cy + ch);
 			nvgScale(args.vg, 1.f, -1.f);
-			NVGpaint p = nvgImagePattern(args.vg, ox, oy, pw, ph, 0.f, nvgImg, 1.f);
+			NVGpaint p = nvgImagePattern(args.vg, ox, (ch - ph) / 2.f, pw, ph, 0.f, nvgImg, 1.f);
 			nvgBeginPath(args.vg);
-			nvgRect(args.vg, 0, 0, w, h);
+			nvgRect(args.vg, cx, 0, cw, ch);
 			nvgFillPaint(args.vg, p);
 			nvgFill(args.vg);
 			nvgRestore(args.vg);
