@@ -29,6 +29,15 @@ struct PDWindow {
 	std::mutex nameMutex;
 	std::string currentPresetName;
 
+	// PCM audio feed (stereo interleaved, written by audio thread)
+	static const int PCM_SIZE = 512;
+	std::mutex pcmMutex;
+	float pcmBuf[PCM_SIZE * 2] = {};
+	int   pcmPos = 0;
+	bool  pcmReady = false;
+
+	void addSample(float L, float R);
+
 	void open();
 	void close();
 	void loop();

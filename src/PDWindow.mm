@@ -12,6 +12,18 @@
 - (BOOL)acceptsFirstResponder { return NO; }
 @end
 
+void PDWindow::addSample(float L, float R) {
+	std::lock_guard<std::mutex> lock(pcmMutex);
+	if (pcmPos < PCM_SIZE * 2) {
+		pcmBuf[pcmPos++] = L;
+		pcmBuf[pcmPos++] = R;
+		if (pcmPos >= PCM_SIZE * 2) {
+			pcmReady = true;
+			pcmPos = 0;
+		}
+	}
+}
+
 void PDWindow::open() {
 	pixels.resize(pixelW * pixelH * 4, 0);
 	// Pre-fill with dark colour so something shows before projectM starts
@@ -105,6 +117,15 @@ void PDWindow::loop() {
 		if (requestPrev.exchange(false)) { pm->selectPrevious(true); }
 		int preset = requestPreset.exchange(-1);
 		if (preset >= 0) pm->selectPreset((unsigned)preset, true);
+
+		// Feed audio to projectM
+		{
+			std::lock_guard<std::mutex> lock(pcmMutex);
+			if (pcmReady) {
+				pm->pcm()->addPCMfloat_2ch(pcmBuf, PCM_SIZE);
+				pcmReady = false;
+			}
+		}
 
 		pm->renderFrame();
 

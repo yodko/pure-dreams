@@ -78,20 +78,29 @@ struct RackBgWidget : widget::Widget {
 
 struct PureDreams : Module {
 	enum ParamId  { PREV_PARAM, NEXT_PARAM, BRIGHTNESS_PARAM, PARAMS_LEN };
-	enum InputId  { INPUTS_LEN };
+	enum InputId  { L_INPUT, R_INPUT, INPUTS_LEN };
 	enum OutputId { OUTPUTS_LEN };
 	enum LightId  { LIGHTS_LEN };
 
 	dsp::SchmittTrigger nextTrig, prevTrig;
+	PDWindow* pdWin = nullptr; // set by widget after construction
 
 	PureDreams() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		configButton(PREV_PARAM, "Prev preset");
 		configButton(NEXT_PARAM, "Next preset");
 		configParam(BRIGHTNESS_PARAM, 0.f, 1.f, 1.f, "Brightness");
+		configInput(L_INPUT, "Left audio");
+		configInput(R_INPUT, "Right audio");
 	}
 
-	void process(const ProcessArgs&) override {}
+	void process(const ProcessArgs&) override {
+		if (!pdWin) return;
+		float L = inputs[L_INPUT].getVoltage() / 5.f;
+		float R = inputs[R_INPUT].isConnected()
+			? inputs[R_INPUT].getVoltage() / 5.f : L;
+		pdWin->addSample(L, R);
+	}
 };
 
 // ── Searchable preset menu item ───────────────────────────────────────────────
@@ -152,6 +161,13 @@ struct PureDreamsWidget : ModuleWidget {
 			Vec(cx, RACK_GRID_HEIGHT/2.f - 10.f), module, PureDreams::NEXT_PARAM));
 		addParam(createParamCentered<Trimpot>(
 			Vec(cx, RACK_GRID_HEIGHT/2.f + 45.f), module, PureDreams::BRIGHTNESS_PARAM));
+		addInput(createInputCentered<PJ301MPort>(
+			Vec(cx, RACK_GRID_HEIGHT - 55.f), module, PureDreams::L_INPUT));
+		addInput(createInputCentered<PJ301MPort>(
+			Vec(cx, RACK_GRID_HEIGHT - 25.f), module, PureDreams::R_INPUT));
+
+		// Give the module a pointer to pdWin for audio feeding
+		if (module && pdWin) module->pdWin = pdWin;
 	}
 
 	~PureDreamsWidget() {
