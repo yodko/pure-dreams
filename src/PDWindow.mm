@@ -148,7 +148,10 @@ void PDWindow::loop() {
 		[ctx flushBuffer];
 	}
 
-	// Finish all pending GL operations before destroying projectM
+	// Finish all pending GL operations.
+	// We intentionally don't call delete pm here — projectM v3's destructor
+	// has a vtable crash on macOS ARM64. The GL context closes with the window
+	// and the OS reclaims all memory on exit.
 	glFinish();
-	delete pm;
+	pm = nullptr;
 }
