@@ -244,15 +244,18 @@ struct PureDreamsWidget : ModuleWidget {
 			if (rackBg)
 				rackBg->brightness = m->params[PureDreams::BRIGHTNESS_PARAM].getValue();
 
-			// Restore saved preset once projectM is ready
+			// Restore saved preset once projectM is ready; default to preset 0
 			if (!restored && pdWin->pixelsDirty) {
 				restored = true;
 				if (!m->savedPresetName.empty()) {
 					auto& ps = allPresets();
 					auto it = std::find(ps.begin(), ps.end(), m->savedPresetName);
-					if (it != ps.end()) {
+					if (it != ps.end())
 						pdWin->requestPreset = (int)std::distance(ps.begin(), it);
-					}
+					else
+						pdWin->requestPreset = 0; // fallback to first
+				} else {
+					pdWin->requestPreset = 0; // fresh placement → first preset
 				}
 			}
 
@@ -309,38 +312,39 @@ struct PureDreamsWidget : ModuleWidget {
 		drawScrew(w/2.f, 8.f);
 		drawScrew(w/2.f, h-8.f);
 
-		nvgFontSize(args.vg, 6.5f);
-		nvgFillColor(args.vg, nvgRGB(70,70,65));
+		// Bold PURE DREAMS title
+		nvgFontSize(args.vg, 8.f);
+		nvgFillColor(args.vg, nvgRGB(45,45,40));
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER|NVG_ALIGN_MIDDLE);
-		nvgText(args.vg, w/2.f, 22.f, "PURE", nullptr);
+		nvgText(args.vg, w/2.f, 21.f, "PURE", nullptr);
 		nvgText(args.vg, w/2.f, 30.f, "DREAMS", nullptr);
 
-		// Button labels — + above, - below
-		nvgFontSize(args.vg, 7.f);
-		nvgFillColor(args.vg, nvgRGB(90,90,85));
+		// + label above top button only (removed - label)
+		nvgFontSize(args.vg, 8.f);
+		nvgFillColor(args.vg, nvgRGB(60,60,55));
 		nvgText(args.vg, w/2.f, 44.f, "+", nullptr);
-		nvgText(args.vg, w/2.f, 89.f, "-", nullptr);
 
 		// Brightness label
-		nvgFontSize(args.vg, 6.f);
-		nvgFillColor(args.vg, nvgRGB(100,100,95));
+		nvgFontSize(args.vg, 6.5f);
+		nvgFillColor(args.vg, nvgRGB(80,80,75));
 		nvgText(args.vg, w/2.f, 173.f, "DIM", nullptr);
 
-		// Socket surround (CV-style rounded rect) + IN label below
+		// Socket surround — elongated to include IN inside
 		{
 			float sx = w/2.f, sy = RACK_GRID_HEIGHT - 50.f;
-			float sr = 13.5f;
+			float sw2 = 13.5f, sh2 = 18.f; // wider vertically to fit IN
 			nvgBeginPath(args.vg);
-			nvgRoundedRect(args.vg, sx-sr, sy-sr, sr*2, sr*2, 5.f);
+			nvgRoundedRect(args.vg, sx-sw2, sy-sw2, sw2*2, sh2*2, 5.f);
 			nvgFillColor(args.vg, nvgRGB(212,212,206));
 			nvgFill(args.vg);
 			nvgBeginPath(args.vg);
-			nvgRoundedRect(args.vg, sx-sr, sy-sr, sr*2, sr*2, 5.f);
+			nvgRoundedRect(args.vg, sx-sw2, sy-sw2, sw2*2, sh2*2, 5.f);
 			nvgStrokeColor(args.vg, nvgRGB(175,175,170));
 			nvgStrokeWidth(args.vg, 1.f); nvgStroke(args.vg);
-			nvgFontSize(args.vg, 7.f);
-			nvgFillColor(args.vg, nvgRGB(70,70,65));
-			nvgText(args.vg, sx, sy + sr + 8.f, "IN", nullptr);
+			// Bold IN inside the box
+			nvgFontSize(args.vg, 8.5f);
+			nvgFillColor(args.vg, nvgRGB(50,50,45));
+			nvgText(args.vg, sx, sy + sw2 + 5.f, "IN", nullptr);
 		}
 
 		ModuleWidget::draw(args);
