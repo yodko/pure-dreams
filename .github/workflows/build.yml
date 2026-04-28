@@ -68,6 +68,7 @@ jobs:
             make
             unzip
             curl
+            jq
       - name: Download Rack SDK
         run: |
           curl -fsSL "https://vcvrack.com/downloads/Rack-SDK-${{ env.RACK_SDK_VERSION }}-win-x64.zip" -o rack-sdk.zip
