@@ -55,8 +55,12 @@ void PDWindow::open() {
 		PDGLView* v = [[PDGLView alloc] initWithFrame:frame pixelFormat:fmt];
 		[w setContentView:v];
 		[v prepareOpenGL];
-		[w orderFront:nil];  // show briefly to initialise GL context
-		[w orderOut:nil];    // hide — GL context remains active
+		// Keep window off-screen rather than hiding — orderOut on macOS 15 deallocates
+		// the Metal-backed framebuffer, causing glReadPixels to fault on a null buffer.
+		// Collection behaviour flags above prevent it appearing in Mission Control.
+		[w setFrameOrigin:NSMakePoint(-pixelW - 20, -pixelH - 20)];
+		[w setAlphaValue:0.f];
+		[w orderFront:nil];
 
 		win  = (__bridge void*)w;
 		view = (__bridge void*)v;
