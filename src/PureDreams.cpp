@@ -210,28 +210,25 @@ struct PureDreamsWidget : ModuleWidget {
 		}
 
 		float cx = box.size.x / 2.f;
-		// Buttons side by side
-		addParam(createParamCentered<TL1105>(Vec(cx, 56.f), module, PureDreams::NEXT_PARAM));
-		addParam(createParamCentered<TL1105>(Vec(cx, 78.f), module, PureDreams::PREV_PARAM));
-		// Brightness knob
-		addParam(createParamCentered<Trimpot>(Vec(cx, 160.f), module, PureDreams::BRIGHTNESS_PARAM));
-		// Audio input
-		addInput(createInputCentered<PJ301MPort>(Vec(cx, RACK_GRID_HEIGHT - 50.f), module, PureDreams::AUDIO_INPUT));
-
-		// Binary LED display — 9 actual VCV Rack lights (yellowy-green, glow in dark)
+		// Binary LEDs under title (rows at y=35,42,49)
 		for (int i = 0; i < 9; i++) {
 			int row = i / 3, col = i % 3;
-			float x = 5.f + col * 7.f;
-			float y = 96.f + row * 7.f;
-			addChild(createLight<SmallLight<GreenLight>>(Vec(x, y), module, PureDreams::BIT_LIGHTS + i));
+			addChild(createLight<SmallLight<GreenLight>>(
+				Vec(5.f + col*7.f, 35.f + row*7.f), module, PureDreams::BIT_LIGHTS + i));
 		}
-		// Transparent hover area over LEDs for tooltip
 		if (module) {
-			auto* tip = createWidget<LEDTooltipArea>(Vec(2.f, 93.f));
+			auto* tip = createWidget<LEDTooltipArea>(Vec(2.f, 32.f));
 			tip->pdWin = pdWin;
 			tip->total = (int)allPresets().size();
 			addChild(tip);
 		}
+		// Buttons below LEDs
+		addParam(createParamCentered<TL1105>(Vec(cx, 75.f),  module, PureDreams::NEXT_PARAM));
+		addParam(createParamCentered<TL1105>(Vec(cx, 100.f), module, PureDreams::PREV_PARAM));
+		// Brightness knob
+		addParam(createParamCentered<Trimpot>(Vec(cx, 170.f), module, PureDreams::BRIGHTNESS_PARAM));
+		// Audio input
+		addInput(createInputCentered<PJ301MPort>(Vec(cx, RACK_GRID_HEIGHT - 50.f), module, PureDreams::AUDIO_INPUT));
 	}
 
 	~PureDreamsWidget() {
@@ -330,25 +327,29 @@ struct PureDreamsWidget : ModuleWidget {
 		drawScrew(w/2.f, 8.f);
 		drawScrew(w/2.f, h-8.f);
 
-		PureDreams* mref = dynamic_cast<PureDreams*>(this->module);
-		float ls = mref ? mref->labelSize : 10.f;
+		// Bold text helper — draws twice for faux-bold
+		auto boldText = [&](float x, float y, const char* t) {
+			nvgText(args.vg, x,       y, t, nullptr);
+			nvgText(args.vg, x+0.6f,  y, t, nullptr);
+		};
+
+		nvgTextAlign(args.vg, NVG_ALIGN_CENTER|NVG_ALIGN_MIDDLE);
 
 		// Title: ('-')
-		nvgFontSize(args.vg, ls * 0.95f);
-		nvgFillColor(args.vg, nvgRGB(30,30,25));
-		nvgTextAlign(args.vg, NVG_ALIGN_CENTER|NVG_ALIGN_MIDDLE);
-		nvgText(args.vg, w/2.f, 25.f, "('-')", nullptr);
+		nvgFontSize(args.vg, 11.f);
+		nvgFillColor(args.vg, nvgRGB(28,28,22));
+		boldText(w/2.f, 22.f, "('-')");
 
 		// + above top button, - below bottom button
-		nvgFontSize(args.vg, ls);
-		nvgFillColor(args.vg, nvgRGB(35,35,30));
-		nvgText(args.vg, w/2.f, 44.f, "+", nullptr);
-		nvgText(args.vg, w/2.f, 89.f, "-", nullptr);
+		nvgFontSize(args.vg, 11.f);
+		nvgFillColor(args.vg, nvgRGB(32,32,26));
+		boldText(w/2.f, 64.f, "+");
+		boldText(w/2.f, 113.f, "-");
 
 		// Brightness label
-		nvgFontSize(args.vg, ls * 0.85f);
-		nvgFillColor(args.vg, nvgRGB(50,50,45));
-		nvgText(args.vg, w/2.f, 173.f, "DIM", nullptr);
+		nvgFontSize(args.vg, 9.f);
+		nvgFillColor(args.vg, nvgRGB(45,45,38));
+		boldText(w/2.f, 183.f, "DIM");
 
 		// Socket surround — elongated to include IN inside
 		{
@@ -363,25 +364,15 @@ struct PureDreamsWidget : ModuleWidget {
 			nvgStrokeColor(args.vg, nvgRGB(175,175,170));
 			nvgStrokeWidth(args.vg, 1.f); nvgStroke(args.vg);
 			// Bold IN inside the box
-			nvgFontSize(args.vg, ls);
+			nvgFontSize(args.vg, 10.f);
 			nvgFillColor(args.vg, nvgRGB(30,30,25));
-			nvgText(args.vg, sx, sy + sw2 + 5.f, "IN", nullptr);
+			boldText(sx, sy + sw2 + 5.f, "IN");
 		}
 
 		ModuleWidget::draw(args);
 	}
 
 	void appendContextMenu(Menu* menu) override {
-		menu->addChild(new MenuSeparator);
-		PureDreams* m2 = dynamic_cast<PureDreams*>(this->module);
-		if (m2) {
-			menu->addChild(createMenuLabel("Text size"));
-			auto* s = new ui::Slider;
-			s->quantity = new FloatQ(&m2->labelSize, 6.f, 24.f, "Text size");
-			s->box.size.x = 180;
-			menu->addChild(s);
-		}
-
 		menu->addChild(new MenuSeparator);
 		menu->addChild(createMenuLabel("Presets"));
 
