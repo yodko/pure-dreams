@@ -348,7 +348,7 @@ struct PureDreamsWidget : ModuleWidget {
 		nvgFontSize(args.vg, 11.f);
 		nvgFillColor(args.vg, nvgRGB(32,32,26));
 		thinText(w/2.f, 68.f, "+");
-		thinText(w/2.f, 131.f, "—");
+		thinText(w/2.f, 131.f, "–");
 
 		// Brightness label
 		nvgFontSize(args.vg, 9.f);
