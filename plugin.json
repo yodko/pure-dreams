@@ -3,20 +3,22 @@
   "name": "Pure Dreams",
   "version": "2.0.0",
   "license": "GPL-3.0-or-later",
-  "brand": "Pure Dreams",
-  "author": "georgechara",
+  "brand": "YODKO",
+  "author": "George Charalambous",
   "authorEmail": "george@charalambous.uk",
-  "authorUrl": "https://github.com/georgechara/pure-dreams",
-  "pluginUrl": "https://github.com/georgechara/pure-dreams",
-  "sourceUrl": "https://github.com/georgechara/pure-dreams",
-  "manualUrl": "",
+  "authorUrl": "https://github.com/yodko",
+  "pluginUrl": "https://github.com/yodko/pure-dreams",
+  "sourceUrl": "https://github.com/yodko/pure-dreams",
+  "manualUrl": "https://github.com/yodko/pure-dreams#readme",
   "donateUrl": "",
+  "changelogUrl": "",
+  "minRackVersion": "2.4.0",
   "modules": [
     {
       "slug": "PureDreams",
-      "name": "Pure Dreams",
-      "description": "projectM visualizer backdrop — MilkDrop presets as a living case background behind your modules",
-      "tags": ["Visual", "Utility"]
+      "name": "('-')",
+      "description": "Audio-reactive MilkDrop visualiser as a living rack background. Powered by projectM.",
+      "tags": ["Visual"]
     }
   ]
 }
