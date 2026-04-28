@@ -45,10 +45,15 @@ jobs:
           [ "$SIZE" -gt 50000 ] || (echo "Binary suspiciously small" && exit 1)
           nm -g plugin.dylib | grep -q " T _init" || (echo "init symbol missing" && exit 1)
           echo "All checks passed"
+      - name: Assemble plugin package
+        run: |
+          mkdir -p PureDreams
+          cp plugin.dylib plugin.json PureDreams/
+          cp -r res PureDreams/
       - uses: actions/upload-artifact@v4
         with:
           name: PureDreams-mac-arm64
-          path: plugin.dylib
+          path: PureDreams/
 
   build-linux:
     name: Build (Linux x64 — stub)
@@ -73,11 +78,18 @@ jobs:
           echo "Binary size: $SIZE bytes"
           [ "$SIZE" -gt 10000 ] || (echo "Binary suspiciously small" && exit 1)
           nm -D plugin.so | grep -q " T init" || (echo "init symbol missing" && exit 1)
+          echo "Shared library dependencies:"
+          ldd plugin.so
           echo "All checks passed"
+      - name: Assemble plugin package
+        run: |
+          mkdir -p PureDreams
+          cp plugin.so plugin.json PureDreams/
+          cp -r res PureDreams/
       - uses: actions/upload-artifact@v4
         with:
           name: PureDreams-lin-x64
-          path: plugin.so
+          path: PureDreams/
 
   build-windows:
     name: Build (Windows x64 — stub)
@@ -94,6 +106,7 @@ jobs:
           install: >-
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-make
+            mingw-w64-ucrt-x86_64-binutils
             make
             unzip
             curl
@@ -110,8 +123,15 @@ jobs:
           SIZE=$(wc -c < plugin.dll)
           echo "Binary size: $SIZE bytes"
           [ "$SIZE" -gt 10000 ] || (echo "Binary suspiciously small" && exit 1)
+          echo "DLL imports:"
+          objdump -p plugin.dll | grep "DLL Name"
           echo "All checks passed"
+      - name: Assemble plugin package
+        run: |
+          mkdir -p PureDreams
+          cp plugin.dll plugin.json PureDreams/
+          cp -r res PureDreams/
       - uses: actions/upload-artifact@v4
         with:
           name: PureDreams-win-x64
-          path: plugin.dll
+          path: PureDreams/
