@@ -56,7 +56,6 @@ struct RackBgWidget : widget::Widget {
 			}
 		}
 
-		// Always fill dark base first
 		nvgBeginPath(args.vg); nvgRect(args.vg, 0, 0, w, h);
 		nvgFillColor(args.vg, nvgRGB(12, 12, 16)); nvgFill(args.vg);
 
@@ -88,20 +87,22 @@ struct PureDreams : Module {
 
 	dsp::SchmittTrigger nextTrig, prevTrig;
 	PDWindow* pdWin = nullptr;
-	std::string savedPresetName; // saved by name for reliability
+	std::string savedPresetName;
+	bool presetExplicitlyChanged = false; // only save when user explicitly changes
 
 	PureDreams() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		configButton(PREV_PARAM, "Prev preset");
 		configButton(NEXT_PARAM, "Next preset");
 		configParam(BRIGHTNESS_PARAM, 0.f, 1.f, 1.f, "Brightness");
-		configInput(AUDIO_INPUT, "Audio");
 		configParam(PRESET_IDX_PARAM, 0.f, 9999.f, 0.f, "Preset index");
+		configInput(AUDIO_INPUT, "Audio");
 	}
 
 	json_t* dataToJson() override {
 		json_t* r = json_object();
 		json_object_set_new(r, "presetName", json_string(savedPresetName.c_str()));
+		json_object_set_new(r, "presetIdx",  json_integer((int)params[PRESET_IDX_PARAM].getValue()));
 		return r;
 	}
 	void dataFromJson(json_t* r) override {
@@ -116,7 +117,7 @@ struct PureDreams : Module {
 	}
 };
 
-// ── Searchable preset menu item ───────────────────────────────────────────────
+// ── Preset menu item ──────────────────────────────────────────────────────────
 
 struct PresetItem : MenuItem {
 	PDWindow*   pdWin;
@@ -126,8 +127,12 @@ struct PresetItem : MenuItem {
 	ui::TextField* searchField;
 
 	void onAction(const ActionEvent&) override {
-		if (pdWin)   pdWin->requestPreset = index;
-		if (module)  module->savedPresetName = presetName;
+		if (pdWin) pdWin->requestPreset = index;
+		if (module) {
+			module->savedPresetName = presetName;
+			module->presetExplicitlyChanged = true;
+			APP->engine->setParamValue(module, PureDreams::PRESET_IDX_PARAM, (float)index);
+		}
 	}
 
 	void step() override {
@@ -165,14 +170,15 @@ struct PureDreamsWidget : ModuleWidget {
 		}
 
 		float cx = box.size.x / 2.f;
+		// Next at top, Prev at bottom, brightness in middle, audio above prev
 		addParam(createParamCentered<VCVBezel>(
-			Vec(cx, RACK_GRID_HEIGHT/2.f - 50.f), module, PureDreams::PREV_PARAM));
-		addParam(createParamCentered<VCVBezel>(
-			Vec(cx, RACK_GRID_HEIGHT/2.f - 10.f), module, PureDreams::NEXT_PARAM));
+			Vec(cx, RACK_GRID_HEIGHT/2.f - 60.f), module, PureDreams::NEXT_PARAM));
 		addParam(createParamCentered<Trimpot>(
-			Vec(cx, RACK_GRID_HEIGHT/2.f + 45.f), module, PureDreams::BRIGHTNESS_PARAM));
+			Vec(cx, RACK_GRID_HEIGHT/2.f + 10.f), module, PureDreams::BRIGHTNESS_PARAM));
 		addInput(createInputCentered<PJ301MPort>(
-			Vec(cx, RACK_GRID_HEIGHT - 30.f), module, PureDreams::AUDIO_INPUT));
+			Vec(cx, RACK_GRID_HEIGHT - 65.f), module, PureDreams::AUDIO_INPUT));
+		addParam(createParamCentered<VCVBezel>(
+			Vec(cx, RACK_GRID_HEIGHT - 30.f), module, PureDreams::PREV_PARAM));
 	}
 
 	~PureDreamsWidget() {
@@ -189,9 +195,11 @@ struct PureDreamsWidget : ModuleWidget {
 		if (m && pdWin) {
 			if (m->nextTrig.process(m->params[PureDreams::NEXT_PARAM].getValue()) > 0.f) {
 				pdWin->requestNext = true;
+				m->presetExplicitlyChanged = true;
 			}
 			if (m->prevTrig.process(m->params[PureDreams::PREV_PARAM].getValue()) > 0.f) {
 				pdWin->requestPrev = true;
+				m->presetExplicitlyChanged = true;
 			}
 			if (rackBg)
 				rackBg->brightness = m->params[PureDreams::BRIGHTNESS_PARAM].getValue();
@@ -203,23 +211,19 @@ struct PureDreamsWidget : ModuleWidget {
 					auto& ps = allPresets();
 					auto it = std::find(ps.begin(), ps.end(), m->savedPresetName);
 					if (it != ps.end()) {
-						int idx = (int)std::distance(ps.begin(), it);
-						pdWin->requestPreset = idx;
+						pdWin->requestPreset = (int)std::distance(ps.begin(), it);
 					}
 				}
 			}
 
-			// Sync savedPresetName + hidden PRESET_IDX_PARAM (triggers dirty flag)
-			{
+			// Only save preset name when user explicitly changed it (not on restore)
+			if (m->presetExplicitlyChanged) {
 				std::lock_guard<std::mutex> nl(pdWin->nameMutex);
-				if (!pdWin->currentPresetName.empty() &&
-				    pdWin->currentPresetName != m->savedPresetName) {
+				if (!pdWin->currentPresetName.empty()) {
 					m->savedPresetName = pdWin->currentPresetName;
-					// Update hidden param so VCV detects the change
 					int idx = pdWin->currentPresetIndex.load();
-					float cur = m->params[PureDreams::PRESET_IDX_PARAM].getValue();
-					if ((int)cur != idx)
-						APP->engine->setParamValue(m, PureDreams::PRESET_IDX_PARAM, (float)idx);
+					APP->engine->setParamValue(m, PureDreams::PRESET_IDX_PARAM, (float)idx);
+					m->presetExplicitlyChanged = false;
 				}
 			}
 		}
@@ -228,47 +232,55 @@ struct PureDreamsWidget : ModuleWidget {
 
 	void draw(const DrawArgs& args) override {
 		float w = box.size.x, h = box.size.y;
+
+		// Off-white panel like FM-OP
 		nvgBeginPath(args.vg); nvgRect(args.vg, 0, 0, w, h);
-		nvgFillColor(args.vg, nvgRGB(10,10,14)); nvgFill(args.vg);
+		nvgFillColor(args.vg, nvgRGB(228, 228, 220)); nvgFill(args.vg);
 
-		PureDreams* m = dynamic_cast<PureDreams*>(this->module);
+		// Border
+		nvgBeginPath(args.vg); nvgRect(args.vg, 0.5f, 0.5f, w-1, h-1);
+		nvgStrokeColor(args.vg, nvgRGB(160,160,155));
+		nvgStrokeWidth(args.vg, 1.f); nvgStroke(args.vg);
 
-		// Preset counter: "042 / 4188"
-		if (pdWin && m) {
+		// Screw circles (top and bottom)
+		auto drawScrew = [&](float x, float y) {
+			nvgBeginPath(args.vg); nvgCircle(args.vg, x, y, 4.f);
+			nvgFillColor(args.vg, nvgRGB(200,200,195)); nvgFill(args.vg);
+			nvgBeginPath(args.vg); nvgCircle(args.vg, x, y, 4.f);
+			nvgStrokeColor(args.vg, nvgRGB(150,150,145));
+			nvgStrokeWidth(args.vg, 0.8f); nvgStroke(args.vg);
+			// Slot
+			nvgBeginPath(args.vg);
+			nvgMoveTo(args.vg, x-2.f, y); nvgLineTo(args.vg, x+2.f, y);
+			nvgStrokeColor(args.vg, nvgRGBA(0,0,0,60));
+			nvgStrokeWidth(args.vg, 1.f); nvgStroke(args.vg);
+		};
+		drawScrew(w/2.f, 8.f);
+		drawScrew(w/2.f, h-8.f);
+
+		// Title
+		nvgFontSize(args.vg, 6.5f);
+		nvgFillColor(args.vg, nvgRGB(70,70,65));
+		nvgTextAlign(args.vg, NVG_ALIGN_CENTER|NVG_ALIGN_MIDDLE);
+		nvgText(args.vg, w/2.f, 22.f, "PURE", nullptr);
+		nvgText(args.vg, w/2.f, 30.f, "DREAMS", nullptr);
+
+		// Preset counter
+		if (pdWin) {
 			int idx   = pdWin->currentPresetIndex.load();
 			int total = (int)allPresets().size();
-			char buf[32];
-			snprintf(buf, sizeof(buf), "%d / %d", idx + 1, total);
-			nvgFontSize(args.vg, 8.f);
-			nvgFillColor(args.vg, nvgRGB(120, 120, 150));
-			nvgTextAlign(args.vg, NVG_ALIGN_CENTER|NVG_ALIGN_MIDDLE);
-			nvgText(args.vg, w/2.f, h/2.f + 22.f, buf, nullptr);
-		}
+			char buf[16];
+			snprintf(buf, sizeof(buf), "%d/%d", idx+1, total);
+			nvgFontSize(args.vg, 6.f);
+			nvgFillColor(args.vg, nvgRGB(100,100,95));
+			nvgText(args.vg, w/2.f, h/2.f - 20.f, buf, nullptr);
 
-		// Current preset name (rotated)
-		if (pdWin) {
-			std::lock_guard<std::mutex> nl(pdWin->nameMutex);
-			if (!pdWin->currentPresetName.empty()) {
-				std::string name = pdWin->currentPresetName;
-				if (name.size() > 16) name = name.substr(0,15) + "…";
-				nvgSave(args.vg);
-				nvgTranslate(args.vg, w/2.f, h/2.f + 75.f);
-				nvgRotate(args.vg, -M_PI/2.f);
-				nvgFontSize(args.vg, 7.f);
-				nvgFillColor(args.vg, nvgRGB(90, 90, 115));
-				nvgTextAlign(args.vg, NVG_ALIGN_CENTER|NVG_ALIGN_MIDDLE);
-				nvgText(args.vg, 0, 0, name.c_str(), nullptr);
-				nvgRestore(args.vg);
-			}
-		}
+			// Brightness label
+			nvgText(args.vg, w/2.f, h/2.f + 26.f, "DIM", nullptr);
 
-		nvgSave(args.vg);
-		nvgTranslate(args.vg, w/2.f, h/2.f - 80.f);
-		nvgRotate(args.vg, -M_PI/2.f);
-		nvgFontSize(args.vg, 8.f); nvgFillColor(args.vg, nvgRGB(80,80,100));
-		nvgTextAlign(args.vg, NVG_ALIGN_CENTER|NVG_ALIGN_MIDDLE);
-		nvgText(args.vg, 0, 0, "PURE DREAMS", nullptr);
-		nvgRestore(args.vg);
+			// Labels
+			nvgText(args.vg, w/2.f, RACK_GRID_HEIGHT - 80.f, "IN", nullptr);
+		}
 
 		ModuleWidget::draw(args);
 	}

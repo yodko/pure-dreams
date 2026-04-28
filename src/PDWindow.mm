@@ -112,12 +112,25 @@ void PDWindow::loop() {
 	s.presetDuration = 86400;
 	s.fps = 60; s.meshX = 32; s.meshY = 24;
 	projectM* pm = new projectM(s);
+	pm->setPresetLock(true); // stay on chosen preset — unlock only for next/prev
 
 	while (running) {
-		if (requestNext.exchange(false)) { pm->selectNext(true); }
-		if (requestPrev.exchange(false)) { pm->selectPrevious(true); }
+		if (requestNext.exchange(false)) {
+			pm->setPresetLock(false);
+			pm->selectNext(true);
+			pm->setPresetLock(true);
+		}
+		if (requestPrev.exchange(false)) {
+			pm->setPresetLock(false);
+			pm->selectPrevious(true);
+			pm->setPresetLock(true);
+		}
 		int preset = requestPreset.exchange(-1);
-		if (preset >= 0) pm->selectPreset((unsigned)preset, true);
+		if (preset >= 0) {
+			pm->setPresetLock(false);
+			pm->selectPreset((unsigned)preset, true);
+			pm->setPresetLock(true);
+		}
 
 		// Feed audio to projectM
 		{
