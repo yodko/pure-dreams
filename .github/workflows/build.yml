@@ -1,0 +1,75 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  RACK_SDK_VERSION: 2.6.1
+
+jobs:
+
+  validate:
+    name: Validate plugin.json
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Run manifest validator
+        run: |
+          pip install -q requests jsonschema
+          curl -fsSL https://raw.githubusercontent.com/cschol/rack-library-tools/main/rack-manifest-validator.py -o validator.py
+          python validator.py plugin.json
+
+  build-mac:
+    name: Build (macOS ARM64 — full projectM)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install projectM
+        run: brew install projectm
+      - name: Download Rack SDK
+        run: |
+          curl -fsSL "https://vcvrack.com/downloads/Rack-SDK-${{ env.RACK_SDK_VERSION }}-mac-arm64.zip" -o rack-sdk.zip
+          unzip -q rack-sdk.zip
+      - name: Build
+        run: make RACK_DIR=$(echo Rack-SDK-*)
+
+  build-linux:
+    name: Build (Linux x64 — stub)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Rack SDK
+        run: |
+          curl -fsSL "https://vcvrack.com/downloads/Rack-SDK-${{ env.RACK_SDK_VERSION }}-lin-x64.zip" -o rack-sdk.zip
+          unzip -q rack-sdk.zip
+      - name: Build
+        run: make RACK_DIR=$(echo Rack-SDK-*)
+
+  build-windows:
+    name: Build (Windows x64 — stub)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-make
+            unzip
+            curl
+      - name: Download Rack SDK
+        run: |
+          curl -fsSL "https://vcvrack.com/downloads/Rack-SDK-${{ env.RACK_SDK_VERSION }}-win-x64.zip" -o rack-sdk.zip
+          unzip -q rack-sdk.zip
+      - name: Build
+        run: make RACK_DIR=$(echo Rack-SDK-*)
