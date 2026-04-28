@@ -13,6 +13,7 @@
 @end
 
 void PDWindow::addSample(float L, float R) {
+	if (closing) return;
 	std::lock_guard<std::mutex> lock(pcmMutex);
 	if (pcmPos < PCM_SIZE * 2) {
 		pcmBuf[pcmPos++] = L;
@@ -74,6 +75,7 @@ void PDWindow::open() {
 }
 
 void PDWindow::close() {
+	closing  = true;  // tell addSample() to bail out immediately
 	wantOpen = false;
 	running  = false;
 	{

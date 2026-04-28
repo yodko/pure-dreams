@@ -83,7 +83,7 @@ struct PureDreams : Module {
 	enum ParamId  { PREV_PARAM, NEXT_PARAM, BRIGHTNESS_PARAM, PRESET_IDX_PARAM, PARAMS_LEN };
 	enum InputId  { AUDIO_INPUT, INPUTS_LEN };
 	enum OutputId { OUTPUTS_LEN };
-	enum LightId  { LIGHTS_LEN };
+	enum LightId  { BIT_LIGHTS, LIGHTS_LEN = BIT_LIGHTS + 9 };
 
 	dsp::SchmittTrigger nextTrig, prevTrig;
 	PDWindow* pdWin = nullptr;
@@ -114,6 +114,10 @@ struct PureDreams : Module {
 		if (!pdWin) return;
 		float s = inputs[AUDIO_INPUT].getVoltage() / 5.f;
 		pdWin->addSample(s, s);
+		// Drive binary LED lights from current preset index
+		int idx = pdWin->currentPresetIndex.load();
+		for (int i = 0; i < 9; i++)
+			lights[BIT_LIGHTS + i].setBrightness((idx >> (8 - i)) & 1 ? 1.f : 0.f);
 	}
 };
 
@@ -146,38 +150,6 @@ struct PresetItem : MenuItem {
 	}
 };
 
-// ── Binary LED preset display ─────────────────────────────────────────────────
-
-struct BinaryLEDDisplay : Widget {
-	PDWindow* pdWin  = nullptr;
-	int       total  = 413;
-
-	BinaryLEDDisplay() { box.size = Vec(22, 22); }
-
-	void draw(const DrawArgs& args) override {
-		int idx = pdWin ? pdWin->currentPresetIndex.load() : 0;
-		// 9 bits, 3x3 grid. Bit 8 (MSB) top-left, bit 0 (LSB) bottom-right
-		for (int bit = 0; bit < 9; bit++) {
-			bool lit = (idx >> (8 - bit)) & 1;
-			int row = bit / 3, col = bit % 3;
-			float x = col * 7.f + 3.5f;
-			float y = row * 7.f + 3.5f;
-			nvgBeginPath(args.vg);
-			nvgCircle(args.vg, x, y, 2.8f);
-			nvgFillColor(args.vg, lit ? nvgRGB(80,200,80) : nvgRGB(140,140,130));
-			nvgFill(args.vg);
-		}
-	}
-
-	void onHover(const HoverEvent& e) override { e.consume(this); }
-
-	ui::Tooltip* createTooltip() {
-		auto* t = new ui::Tooltip;
-		int idx = pdWin ? pdWin->currentPresetIndex.load() : 0;
-		t->text = string::f("Preset %d / %d", idx + 1, total);
-		return t;
-	}
-};
 
 // ── Widget ────────────────────────────────────────────────────────────────────
 
@@ -211,12 +183,12 @@ struct PureDreamsWidget : ModuleWidget {
 		// Audio input
 		addInput(createInputCentered<PJ301MPort>(Vec(cx, RACK_GRID_HEIGHT - 50.f), module, PureDreams::AUDIO_INPUT));
 
-		// Binary LED display (9-bit preset indicator)
-		if (module) {
-			auto* led = createWidget<BinaryLEDDisplay>(Vec(4.f, 85.f));
-			led->pdWin = pdWin;
-			led->total = (int)allPresets().size();
-			addChild(led);
+		// Binary LED display — 9 actual VCV Rack lights (yellowy-green, glow in dark)
+		for (int i = 0; i < 9; i++) {
+			int row = i / 3, col = i % 3;
+			float x = 5.f + col * 7.f;
+			float y = 85.f + row * 7.f;
+			addChild(createLight<SmallLight<YellowLight>>(Vec(x, y), module, PureDreams::BIT_LIGHTS + i));
 		}
 	}
 
@@ -231,14 +203,7 @@ struct PureDreamsWidget : ModuleWidget {
 			delete rackBg; rackBg = nullptr;
 		}
 
-		// Close render thread, then defer delete to after engine removes module
-		// (Engine::removeModule runs in ModuleWidget::~ModuleWidget after our body)
-		if (pdWin) {
-			pdWin->close();
-			PDWindow* pw = pdWin;
-			pdWin = nullptr;
-			dispatch_async(dispatch_get_main_queue(), ^{ delete pw; });
-		}
+		if (pdWin) { pdWin->close(); delete pdWin; pdWin = nullptr; }
 	}
 
 	void step() override {
