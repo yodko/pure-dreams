@@ -127,14 +127,16 @@ struct PureDreams : Module {
 		smoothed    = smoothed * coeff + raw * (1.f - coeff);
 		pdWin->addSample(smoothed, smoothed);
 
-		// LED: instant attack, variable release
-		// s=0 → τ~0.1ms → decays between audio cycles → rapid short blinks
-		// s=1 → τ~500ms → long glowing pulse per audio event
+		// LED: asymmetric envelope — attack and release both slow up with slider
+		// s=0: attack 1ms,  release 5ms  → rapid short erratic blinks
+		// s=1: attack 20ms, release 80ms → slow smooth long blinks, still goes dark
 		float absRaw   = std::abs(raw);
-		float tau      = 0.0001f * std::pow(5000.f, s);
-		float relCoeff = std::exp(-1.f / (tau * args.sampleRate));
+		float tauA     = 0.001f * std::pow(20.f, s);
+		float tauR     = 0.005f * std::pow(16.f, s);
+		float atkCoeff = std::exp(-1.f / (tauA * args.sampleRate));
+		float relCoeff = std::exp(-1.f / (tauR * args.sampleRate));
 		if (absRaw >= envelope)
-			envelope = absRaw;
+			envelope = envelope * atkCoeff + absRaw * (1.f - atkCoeff);
 		else
 			envelope *= relCoeff;
 		lights[SMOOTH_LIGHT].setBrightness(envelope * 2.f);
