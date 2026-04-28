@@ -80,7 +80,7 @@ struct RackBgWidget : widget::Widget {
 // ── Module ────────────────────────────────────────────────────────────────────
 
 struct PureDreams : Module {
-	enum ParamId  { PREV_PARAM, NEXT_PARAM, BRIGHTNESS_PARAM, PRESET_IDX_PARAM, PARAMS_LEN };
+	enum ParamId  { PREV_PARAM, NEXT_PARAM, BRIGHTNESS_PARAM, SMOOTH_PARAM, PRESET_IDX_PARAM, PARAMS_LEN };
 	enum InputId  { AUDIO_INPUT, INPUTS_LEN };
 	enum OutputId { OUTPUTS_LEN };
 	enum LightId  { BIT_LIGHTS, LIGHTS_LEN = BIT_LIGHTS + 9 };
@@ -89,13 +89,15 @@ struct PureDreams : Module {
 	PDWindow* pdWin = nullptr;
 	std::string savedPresetName;
 	bool presetExplicitlyChanged = false;
-	float labelSize = 10.f; // right-click adjustable
+	float labelSize = 10.f;
+	float smoothed  = 0.f; // IIR state for audio smoothing
 
 	PureDreams() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		configButton(PREV_PARAM, "Prev preset");
 		configButton(NEXT_PARAM, "Next preset");
 		configParam(BRIGHTNESS_PARAM, 0.f, 1.f, 1.f, "Brightness");
+		configParam(SMOOTH_PARAM, 0.f, 0.97f, 0.f, "Smoothing");
 		configParam(PRESET_IDX_PARAM, 0.f, 9999.f, 0.f, "Preset index");
 		configInput(AUDIO_INPUT, "Audio");
 	}
@@ -116,8 +118,10 @@ struct PureDreams : Module {
 
 	void process(const ProcessArgs&) override {
 		if (!pdWin) return;
-		float s = inputs[AUDIO_INPUT].getVoltage() / 5.f;
-		pdWin->addSample(s, s);
+		float raw   = inputs[AUDIO_INPUT].getVoltage() / 5.f;
+		float coeff = params[SMOOTH_PARAM].getValue(); // 0=raw, 0.97=very smooth
+		smoothed    = smoothed * coeff + raw * (1.f - coeff);
+		pdWin->addSample(smoothed, smoothed);
 		// Drive binary LED lights from current preset index
 		int idx = pdWin->currentPresetIndex.load();
 		for (int i = 0; i < 9; i++)
@@ -227,6 +231,8 @@ struct PureDreamsWidget : ModuleWidget {
 		addParam(createParamCentered<TL1105>(Vec(cx, 108.f), module, PureDreams::PREV_PARAM));
 		// Brightness knob
 		addParam(createParamCentered<Trimpot>(Vec(cx, 152.f), module, PureDreams::BRIGHTNESS_PARAM));
+		// Smoothing slider (vertical, between DIM and IN)
+		addParam(createParamCentered<VCVSlider>(Vec(cx, 230.f), module, PureDreams::SMOOTH_PARAM));
 		// Audio input
 		addInput(createInputCentered<PJ301MPort>(Vec(cx, RACK_GRID_HEIGHT - 50.f), module, PureDreams::AUDIO_INPUT));
 	}
@@ -354,6 +360,11 @@ struct PureDreamsWidget : ModuleWidget {
 		nvgFontSize(args.vg, 9.f);
 		nvgFillColor(args.vg, nvgRGB(45,45,38));
 		boldText(w/2.f, 167.f, "DIM");
+
+		// Smooth label above slider
+		nvgFontSize(args.vg, 7.f);
+		nvgFillColor(args.vg, nvgRGB(55,55,48));
+		boldText(w/2.f, 176.f, "SMOOTH");
 
 		// Socket surround — elongated to include IN inside
 		{
