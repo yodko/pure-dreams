@@ -171,7 +171,7 @@ struct BinaryLEDDisplay : Widget {
 
 	void onHover(const HoverEvent& e) override { e.consume(this); }
 
-	ui::Tooltip* createTooltip() override {
+	ui::Tooltip* createTooltip() {
 		auto* t = new ui::Tooltip;
 		int idx = pdWin ? pdWin->currentPresetIndex.load() : 0;
 		t->text = string::f("Preset %d / %d", idx + 1, total);
