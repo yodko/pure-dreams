@@ -117,7 +117,7 @@ struct PureDreams : Module {
 		if (ls) labelSize = (float)json_real_value(ls);
 	}
 
-	void process(const ProcessArgs&) override {
+	void process(const ProcessArgs& args) override {
 		if (!pdWin) return;
 		float raw = inputs[AUDIO_INPUT].getVoltage() / 5.f;
 		float s   = params[SMOOTH_PARAM].getValue();
@@ -127,11 +127,16 @@ struct PureDreams : Module {
 		smoothed    = smoothed * coeff + raw * (1.f - coeff);
 		pdWin->addSample(smoothed, smoothed);
 
-		// LED: same IIR applied to rectified signal
-		// s=0 → coeff=0 → LED = abs(raw) directly → erratic flicker
-		// s=1 → coeff=0.9999 → LED follows slow amplitude envelope → calm
-		float absRaw = std::abs(raw);
-		envelope = envelope * coeff + absRaw * (1.f - coeff);
+		// LED: instant attack, variable release
+		// s=0 → τ~0.1ms → decays between audio cycles → rapid short blinks
+		// s=1 → τ~500ms → long glowing pulse per audio event
+		float absRaw   = std::abs(raw);
+		float tau      = 0.0001f * std::pow(5000.f, s);
+		float relCoeff = std::exp(-1.f / (tau * args.sampleRate));
+		if (absRaw >= envelope)
+			envelope = absRaw;
+		else
+			envelope *= relCoeff;
 		lights[SMOOTH_LIGHT].setBrightness(envelope * 2.f);
 		// Drive binary LED lights from current preset index
 		int idx = pdWin->currentPresetIndex.load();
