@@ -4,7 +4,9 @@ A VCV Rack 2 module that replaces the grey rack background with audio-reactive [
 
 Drop it anywhere in your rack. The entire background becomes a live visualiser that reacts to whatever you patch into its audio input.
 
-![Pure Dreams screenshot](res/screenshot.png)
+![Pure Dreams demo 1](res/demo1.gif)
+
+![Pure Dreams demo 2](res/demo2.gif)
 
 ---
 
