@@ -97,7 +97,7 @@ struct PureDreams : Module {
 		configButton(PREV_PARAM, "Prev preset");
 		configButton(NEXT_PARAM, "Next preset");
 		configParam(BRIGHTNESS_PARAM, 0.f, 1.f, 1.f, "Brightness");
-		configParam(SMOOTH_PARAM, 0.f, 0.97f, 0.f, "Smoothing");
+		configParam(SMOOTH_PARAM, 0.f, 1.f, 0.f, "Smoothing");
 		configParam(PRESET_IDX_PARAM, 0.f, 9999.f, 0.f, "Preset index");
 		configInput(AUDIO_INPUT, "Audio");
 	}
@@ -119,7 +119,9 @@ struct PureDreams : Module {
 	void process(const ProcessArgs&) override {
 		if (!pdWin) return;
 		float raw   = inputs[AUDIO_INPUT].getVoltage() / 5.f;
-		float coeff = params[SMOOTH_PARAM].getValue(); // 0=raw, 0.97=very smooth
+		// Logarithmic mapping: slider 0→1 = coeff 0→0.9999 (0ms to ~230ms smoothing)
+		float s     = params[SMOOTH_PARAM].getValue();
+		float coeff = s > 0.001f ? 1.f - std::pow(10.f, -s * 4.f) : 0.f;
 		smoothed    = smoothed * coeff + raw * (1.f - coeff);
 		pdWin->addSample(smoothed, smoothed);
 		// Flicker light shows smoothed audio level — slow with more smoothing
