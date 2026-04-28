@@ -27,7 +27,6 @@ void PDWindow::addSample(float L, float R) {
 
 void PDWindow::open() {
 	pixels.resize(pixelW * pixelH * 4, 0);
-	// Pre-fill with dark colour so something shows before projectM starts
 	for (int i = 0; i < pixelW * pixelH * 4; i += 4) {
 		pixels[i+0] = 10; pixels[i+1] = 10; pixels[i+2] = 14; pixels[i+3] = 255;
 	}
@@ -36,13 +35,11 @@ void PDWindow::open() {
 	dispatch_async(dispatch_get_main_queue(), ^{
 		if (!wantOpen) return;
 
-		// Offscreen render window — completely hidden from Exposé/Mission Control
 		NSRect frame = NSMakeRect(0, 0, pixelW, pixelH);
 		NSWindow* w = [[NSWindow alloc]
 			initWithContentRect:frame
 			styleMask:NSWindowStyleMaskBorderless
 			backing:NSBackingStoreBuffered defer:NO];
-		// Hide from window management entirely
 		[w setCollectionBehavior:
 			NSWindowCollectionBehaviorTransient |
 			NSWindowCollectionBehaviorIgnoresCycle |
@@ -58,8 +55,8 @@ void PDWindow::open() {
 		PDGLView* v = [[PDGLView alloc] initWithFrame:frame pixelFormat:fmt];
 		[w setContentView:v];
 		[v prepareOpenGL];
-		[w orderFront:nil];   // show briefly to initialise GL
-		[w orderOut:nil];     // then hide completely — GL context still active
+		[w orderFront:nil];  // show briefly to initialise GL context
+		[w orderOut:nil];    // hide — GL context remains active
 
 		win  = (__bridge void*)w;
 		view = (__bridge void*)v;
@@ -75,7 +72,7 @@ void PDWindow::open() {
 }
 
 void PDWindow::close() {
-	closing  = true;  // tell addSample() to bail out immediately
+	closing  = true;  // stops addSample() from locking a destroyed mutex
 	wantOpen = false;
 	running  = false;
 	{
@@ -106,15 +103,15 @@ void PDWindow::loop() {
 	[ctx makeCurrentContext];
 
 	projectM::Settings s;
-	s.windowWidth  = pixelW;
-	s.windowHeight = pixelH;
-	// Use subdirectory with only .milk presets — avoids .dylib plugin crashes
+	s.windowWidth    = pixelW;
+	s.windowHeight   = pixelH;
+	// presets_bltc201 contains only .milk files — avoids .dylib plugin crashes in projectM v3
 	s.presetURL      = "/opt/homebrew/Cellar/projectm/3.1.12/share/projectM/presets/presets_bltc201";
 	s.shuffleEnabled = false;
 	s.presetDuration = 86400;
 	s.fps = 60; s.meshX = 32; s.meshY = 24;
 	projectM* pm = new projectM(s);
-	pm->setPresetLock(true); // stay on chosen preset — unlock only for next/prev
+	pm->setPresetLock(true);
 
 	while (running) {
 		if (requestNext.exchange(false)) {
@@ -134,7 +131,6 @@ void PDWindow::loop() {
 			pm->setPresetLock(true);
 		}
 
-		// Feed audio to projectM
 		{
 			std::lock_guard<std::mutex> lock(pcmMutex);
 			if (pcmReady) {
@@ -145,7 +141,6 @@ void PDWindow::loop() {
 
 		pm->renderFrame();
 
-		// Update current preset name + index
 		unsigned int idx = 0;
 		if (pm->selectedPresetIndex(idx)) {
 			currentPresetIndex = (int)idx;
@@ -163,10 +158,8 @@ void PDWindow::loop() {
 		[ctx flushBuffer];
 	}
 
-	// Finish all pending GL operations.
-	// We intentionally don't call delete pm here — projectM v3's destructor
-	// has a vtable crash on macOS ARM64. The GL context closes with the window
-	// and the OS reclaims all memory on exit.
+	// projectM v3's destructor crashes on macOS ARM64 (vtable fault).
+	// Skip delete — the OS reclaims memory when the GL context closes.
 	glFinish();
 	pm = nullptr;
 }
