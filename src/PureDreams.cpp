@@ -177,8 +177,8 @@ struct PureDreamsWidget : ModuleWidget {
 
 		float cx = box.size.x / 2.f;
 		// Buttons side by side
-		addParam(createParamCentered<TL1105>(Vec(cx, 45.f), module, PureDreams::NEXT_PARAM));
-		addParam(createParamCentered<TL1105>(Vec(cx, 62.f), module, PureDreams::PREV_PARAM));
+		addParam(createParamCentered<TL1105>(Vec(cx, 56.f), module, PureDreams::NEXT_PARAM));
+		addParam(createParamCentered<TL1105>(Vec(cx, 73.f), module, PureDreams::PREV_PARAM));
 		// Brightness knob
 		addParam(createParamCentered<Trimpot>(Vec(cx, 160.f), module, PureDreams::BRIGHTNESS_PARAM));
 		// Audio input
@@ -188,7 +188,7 @@ struct PureDreamsWidget : ModuleWidget {
 		for (int i = 0; i < 9; i++) {
 			int row = i / 3, col = i % 3;
 			float x = 5.f + col * 7.f;
-			float y = 85.f + row * 7.f;
+			float y = 96.f + row * 7.f;
 			addChild(createLight<SmallLight<GreenLight>>(Vec(x, y), module, PureDreams::BIT_LIGHTS + i));
 		}
 	}
@@ -295,8 +295,8 @@ struct PureDreamsWidget : ModuleWidget {
 		// Button labels — + above, - below
 		nvgFontSize(args.vg, 7.f);
 		nvgFillColor(args.vg, nvgRGB(90,90,85));
-		nvgText(args.vg, w/2.f, 37.f, "+", nullptr);
-		nvgText(args.vg, w/2.f, 73.f, "-", nullptr);
+		nvgText(args.vg, w/2.f, 46.f, "+", nullptr);
+		nvgText(args.vg, w/2.f, 84.f, "-", nullptr);
 
 		// Brightness label
 		nvgFontSize(args.vg, 6.f);
