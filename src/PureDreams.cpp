@@ -90,7 +90,8 @@ struct PureDreams : Module {
 	std::string savedPresetName;
 	bool presetExplicitlyChanged = false;
 	float labelSize = 10.f;
-	float smoothed  = 0.f; // IIR state for audio smoothing
+	float smoothed  = 0.f;
+	float envelope  = 0.f; // peak envelope for LED flicker display
 
 	PureDreams() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -118,14 +119,24 @@ struct PureDreams : Module {
 
 	void process(const ProcessArgs&) override {
 		if (!pdWin) return;
-		float raw   = inputs[AUDIO_INPUT].getVoltage() / 5.f;
-		// Logarithmic mapping: slider 0→1 = coeff 0→0.9999 (0ms to ~230ms smoothing)
-		float s     = params[SMOOTH_PARAM].getValue();
+		float raw = inputs[AUDIO_INPUT].getVoltage() / 5.f;
+		float s   = params[SMOOTH_PARAM].getValue();
+
+		// IIR low-pass for projectM audio feed
 		float coeff = s > 0.001f ? 1.f - std::pow(10.f, -s * 4.f) : 0.f;
 		smoothed    = smoothed * coeff + raw * (1.f - coeff);
 		pdWin->addSample(smoothed, smoothed);
-		// Flicker light shows smoothed audio level — slow with more smoothing
-		lights[SMOOTH_LIGHT].setBrightness(std::abs(smoothed) * 3.f);
+
+		// Envelope follower for LED: instant attack, variable release
+		// s=0: release ~22ms → 10-20 flickers/sec
+		// s=1: release ~700ms → 1-2 flickers/sec
+		float absRaw   = std::abs(raw);
+		float relCoeff = 1.f - std::pow(10.f, -3.f - s * 1.5f);
+		if (absRaw >= envelope)
+			envelope = absRaw;
+		else
+			envelope *= relCoeff;
+		lights[SMOOTH_LIGHT].setBrightness(envelope * 2.f);
 		// Drive binary LED lights from current preset index
 		int idx = pdWin->currentPresetIndex.load();
 		for (int i = 0; i < 9; i++)
