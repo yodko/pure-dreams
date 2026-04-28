@@ -37,18 +37,47 @@ jobs:
           unzip -q rack-sdk.zip
       - name: Build
         run: make RACK_DIR=Rack-SDK
+      - name: Verify binary
+        run: |
+          test -f plugin.dylib || (echo "plugin.dylib not found" && exit 1)
+          SIZE=$(wc -c < plugin.dylib)
+          echo "Binary size: $SIZE bytes"
+          [ "$SIZE" -gt 50000 ] || (echo "Binary suspiciously small" && exit 1)
+          nm -g plugin.dylib | grep -q " T _init" || (echo "init symbol missing" && exit 1)
+          echo "All checks passed"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PureDreams-mac-arm64
+          path: plugin.dylib
 
   build-linux:
     name: Build (Linux x64 — stub)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Static analysis
+        run: |
+          sudo apt-get install -y cppcheck
+          cppcheck --enable=warning,performance --error-exitcode=1 \
+            src/PureDreams.cpp src/PDWindow_stub.cpp
       - name: Download Rack SDK
         run: |
           curl -fsSL "https://vcvrack.com/downloads/Rack-SDK-${{ env.RACK_SDK_VERSION }}-lin-x64.zip" -o rack-sdk.zip
           unzip -q rack-sdk.zip
       - name: Build
         run: make RACK_DIR=Rack-SDK
+      - name: Verify binary
+        run: |
+          test -f plugin.so || (echo "plugin.so not found" && exit 1)
+          SIZE=$(wc -c < plugin.so)
+          echo "Binary size: $SIZE bytes"
+          [ "$SIZE" -gt 10000 ] || (echo "Binary suspiciously small" && exit 1)
+          nm -D plugin.so | grep -q " T init" || (echo "init symbol missing" && exit 1)
+          echo "All checks passed"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PureDreams-lin-x64
+          path: plugin.so
 
   build-windows:
     name: Build (Windows x64 — stub)
@@ -75,3 +104,14 @@ jobs:
           unzip -q rack-sdk.zip
       - name: Build
         run: make RACK_DIR=Rack-SDK
+      - name: Verify binary
+        run: |
+          test -f plugin.dll || (echo "plugin.dll not found" && exit 1)
+          SIZE=$(wc -c < plugin.dll)
+          echo "Binary size: $SIZE bytes"
+          [ "$SIZE" -gt 10000 ] || (echo "Binary suspiciously small" && exit 1)
+          echo "All checks passed"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PureDreams-win-x64
+          path: plugin.dll
