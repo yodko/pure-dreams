@@ -6,5 +6,5 @@ A VCV Rack 2 module that replaces the background with audio-reactive [MilkDrop](
 
 - `+` / `–` cycle through presets
 - right-click for a searchable list
-- dim controls brightness
-- smooth controls how tightly the visuals follow the audio
+- **DIM** controls brightness
+- **SMOOTH** controls how tightly the visuals follow the audio
