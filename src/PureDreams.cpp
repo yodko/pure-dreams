@@ -194,7 +194,7 @@ struct PureDreamsWidget : ModuleWidget {
 		float cx = box.size.x / 2.f;
 		// Buttons side by side
 		addParam(createParamCentered<TL1105>(Vec(cx, 56.f), module, PureDreams::NEXT_PARAM));
-		addParam(createParamCentered<TL1105>(Vec(cx, 73.f), module, PureDreams::PREV_PARAM));
+		addParam(createParamCentered<TL1105>(Vec(cx, 78.f), module, PureDreams::PREV_PARAM));
 		// Brightness knob
 		addParam(createParamCentered<Trimpot>(Vec(cx, 160.f), module, PureDreams::BRIGHTNESS_PARAM));
 		// Audio input
@@ -318,16 +318,30 @@ struct PureDreamsWidget : ModuleWidget {
 		// Button labels — + above, - below
 		nvgFontSize(args.vg, 7.f);
 		nvgFillColor(args.vg, nvgRGB(90,90,85));
-		nvgText(args.vg, w/2.f, 42.f, "+", nullptr);
-		nvgText(args.vg, w/2.f, 84.f, "-", nullptr);
+		nvgText(args.vg, w/2.f, 44.f, "+", nullptr);
+		nvgText(args.vg, w/2.f, 89.f, "-", nullptr);
 
 		// Brightness label
 		nvgFontSize(args.vg, 6.f);
 		nvgFillColor(args.vg, nvgRGB(100,100,95));
 		nvgText(args.vg, w/2.f, 173.f, "DIM", nullptr);
 
-		// IN label
-		nvgText(args.vg, w/2.f, RACK_GRID_HEIGHT - 68.f, "IN", nullptr);
+		// Socket surround (CV-style rounded rect) + IN label below
+		{
+			float sx = w/2.f, sy = RACK_GRID_HEIGHT - 50.f;
+			float sr = 13.5f;
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, sx-sr, sy-sr, sr*2, sr*2, 5.f);
+			nvgFillColor(args.vg, nvgRGB(212,212,206));
+			nvgFill(args.vg);
+			nvgBeginPath(args.vg);
+			nvgRoundedRect(args.vg, sx-sr, sy-sr, sr*2, sr*2, 5.f);
+			nvgStrokeColor(args.vg, nvgRGB(175,175,170));
+			nvgStrokeWidth(args.vg, 1.f); nvgStroke(args.vg);
+			nvgFontSize(args.vg, 7.f);
+			nvgFillColor(args.vg, nvgRGB(70,70,65));
+			nvgText(args.vg, sx, sy + sr + 8.f, "IN", nullptr);
+		}
 
 		ModuleWidget::draw(args);
 	}
