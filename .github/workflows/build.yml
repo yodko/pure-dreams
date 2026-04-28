@@ -36,7 +36,9 @@ jobs:
           curl -fsSL "https://vcvrack.com/downloads/Rack-SDK-${{ env.RACK_SDK_VERSION }}-mac-arm64.zip" -o rack-sdk.zip
           unzip -q rack-sdk.zip
       - name: Build
-        run: make RACK_DIR=$(echo Rack-SDK-*)
+        run: |
+          SDK=$(ls -d Rack-SDK-*/ | head -1 | tr -d '/')
+          make RACK_DIR="$SDK"
 
   build-linux:
     name: Build (Linux x64 — stub)
@@ -48,7 +50,9 @@ jobs:
           curl -fsSL "https://vcvrack.com/downloads/Rack-SDK-${{ env.RACK_SDK_VERSION }}-lin-x64.zip" -o rack-sdk.zip
           unzip -q rack-sdk.zip
       - name: Build
-        run: make RACK_DIR=$(echo Rack-SDK-*)
+        run: |
+          SDK=$(ls -d Rack-SDK-*/ | head -1 | tr -d '/')
+          make RACK_DIR="$SDK"
 
   build-windows:
     name: Build (Windows x64 — stub)
@@ -65,6 +69,7 @@ jobs:
           install: >-
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-make
+            make
             unzip
             curl
       - name: Download Rack SDK
@@ -72,4 +77,6 @@ jobs:
           curl -fsSL "https://vcvrack.com/downloads/Rack-SDK-${{ env.RACK_SDK_VERSION }}-win-x64.zip" -o rack-sdk.zip
           unzip -q rack-sdk.zip
       - name: Build
-        run: make RACK_DIR=$(echo Rack-SDK-*)
+        run: |
+          SDK=$(ls -d Rack-SDK-*/ | head -1 | tr -d '/')
+          make RACK_DIR="$SDK"
