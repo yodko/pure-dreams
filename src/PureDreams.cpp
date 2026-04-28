@@ -146,6 +146,39 @@ struct PresetItem : MenuItem {
 	}
 };
 
+// ── Binary LED preset display ─────────────────────────────────────────────────
+
+struct BinaryLEDDisplay : Widget {
+	PDWindow* pdWin  = nullptr;
+	int       total  = 413;
+
+	BinaryLEDDisplay() { box.size = Vec(22, 22); }
+
+	void draw(const DrawArgs& args) override {
+		int idx = pdWin ? pdWin->currentPresetIndex.load() : 0;
+		// 9 bits, 3x3 grid. Bit 8 (MSB) top-left, bit 0 (LSB) bottom-right
+		for (int bit = 0; bit < 9; bit++) {
+			bool lit = (idx >> (8 - bit)) & 1;
+			int row = bit / 3, col = bit % 3;
+			float x = col * 7.f + 3.5f;
+			float y = row * 7.f + 3.5f;
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, x, y, 2.8f);
+			nvgFillColor(args.vg, lit ? nvgRGB(80,200,80) : nvgRGB(140,140,130));
+			nvgFill(args.vg);
+		}
+	}
+
+	void onHover(const HoverEvent& e) override { e.consume(this); }
+
+	ui::Tooltip* createTooltip() override {
+		auto* t = new ui::Tooltip;
+		int idx = pdWin ? pdWin->currentPresetIndex.load() : 0;
+		t->text = string::f("Preset %d / %d", idx + 1, total);
+		return t;
+	}
+};
+
 // ── Widget ────────────────────────────────────────────────────────────────────
 
 struct PureDreamsWidget : ModuleWidget {
@@ -170,15 +203,21 @@ struct PureDreamsWidget : ModuleWidget {
 		}
 
 		float cx = box.size.x / 2.f;
-		// Next at top, Prev at bottom, brightness in middle, audio above prev
-		addParam(createParamCentered<VCVBezel>(
-			Vec(cx, RACK_GRID_HEIGHT/2.f - 60.f), module, PureDreams::NEXT_PARAM));
-		addParam(createParamCentered<Trimpot>(
-			Vec(cx, RACK_GRID_HEIGHT/2.f + 10.f), module, PureDreams::BRIGHTNESS_PARAM));
-		addInput(createInputCentered<PJ301MPort>(
-			Vec(cx, RACK_GRID_HEIGHT - 65.f), module, PureDreams::AUDIO_INPUT));
-		addParam(createParamCentered<VCVBezel>(
-			Vec(cx, RACK_GRID_HEIGHT - 30.f), module, PureDreams::PREV_PARAM));
+		// Buttons side by side
+		addParam(createParamCentered<TL1105>(Vec(8.f,  55.f), module, PureDreams::PREV_PARAM));
+		addParam(createParamCentered<TL1105>(Vec(22.f, 55.f), module, PureDreams::NEXT_PARAM));
+		// Brightness knob
+		addParam(createParamCentered<Trimpot>(Vec(cx, 160.f), module, PureDreams::BRIGHTNESS_PARAM));
+		// Audio input
+		addInput(createInputCentered<PJ301MPort>(Vec(cx, RACK_GRID_HEIGHT - 50.f), module, PureDreams::AUDIO_INPUT));
+
+		// Binary LED display (9-bit preset indicator)
+		if (module) {
+			auto* led = createWidget<BinaryLEDDisplay>(Vec(4.f, 85.f));
+			led->pdWin = pdWin;
+			led->total = (int)allPresets().size();
+			addChild(led);
+		}
 	}
 
 	~PureDreamsWidget() {
@@ -242,45 +281,45 @@ struct PureDreamsWidget : ModuleWidget {
 		nvgStrokeColor(args.vg, nvgRGB(160,160,155));
 		nvgStrokeWidth(args.vg, 1.f); nvgStroke(args.vg);
 
-		// Screw circles (top and bottom)
+		// Phillips screws
 		auto drawScrew = [&](float x, float y) {
 			nvgBeginPath(args.vg); nvgCircle(args.vg, x, y, 4.f);
-			nvgFillColor(args.vg, nvgRGB(200,200,195)); nvgFill(args.vg);
+			NVGpaint sp = nvgRadialGradient(args.vg, x-1, y-1, 0.5f, 4.f,
+				nvgRGB(215,215,208), nvgRGB(185,185,178));
+			nvgFillPaint(args.vg, sp); nvgFill(args.vg);
 			nvgBeginPath(args.vg); nvgCircle(args.vg, x, y, 4.f);
-			nvgStrokeColor(args.vg, nvgRGB(150,150,145));
-			nvgStrokeWidth(args.vg, 0.8f); nvgStroke(args.vg);
-			// Slot
+			nvgStrokeColor(args.vg, nvgRGB(155,155,148));
+			nvgStrokeWidth(args.vg, 0.7f); nvgStroke(args.vg);
+			// Phillips cross
+			float r = 2.2f;
 			nvgBeginPath(args.vg);
-			nvgMoveTo(args.vg, x-2.f, y); nvgLineTo(args.vg, x+2.f, y);
-			nvgStrokeColor(args.vg, nvgRGBA(0,0,0,60));
-			nvgStrokeWidth(args.vg, 1.f); nvgStroke(args.vg);
+			nvgMoveTo(args.vg, x-r, y); nvgLineTo(args.vg, x+r, y);
+			nvgMoveTo(args.vg, x, y-r); nvgLineTo(args.vg, x, y+r);
+			nvgStrokeColor(args.vg, nvgRGBA(0,0,0,70));
+			nvgStrokeWidth(args.vg, 1.1f); nvgStroke(args.vg);
 		};
 		drawScrew(w/2.f, 8.f);
 		drawScrew(w/2.f, h-8.f);
 
-		// Title
 		nvgFontSize(args.vg, 6.5f);
 		nvgFillColor(args.vg, nvgRGB(70,70,65));
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER|NVG_ALIGN_MIDDLE);
 		nvgText(args.vg, w/2.f, 22.f, "PURE", nullptr);
 		nvgText(args.vg, w/2.f, 30.f, "DREAMS", nullptr);
 
-		// Preset counter
-		if (pdWin) {
-			int idx   = pdWin->currentPresetIndex.load();
-			int total = (int)allPresets().size();
-			char buf[16];
-			snprintf(buf, sizeof(buf), "%d/%d", idx+1, total);
-			nvgFontSize(args.vg, 6.f);
-			nvgFillColor(args.vg, nvgRGB(100,100,95));
-			nvgText(args.vg, w/2.f, h/2.f - 20.f, buf, nullptr);
+		// Button labels
+		nvgFontSize(args.vg, 7.f);
+		nvgFillColor(args.vg, nvgRGB(90,90,85));
+		nvgText(args.vg,  8.f, 67.f, "-", nullptr);
+		nvgText(args.vg, 22.f, 67.f, "+", nullptr);
 
-			// Brightness label
-			nvgText(args.vg, w/2.f, h/2.f + 26.f, "DIM", nullptr);
+		// Brightness label
+		nvgFontSize(args.vg, 6.f);
+		nvgFillColor(args.vg, nvgRGB(100,100,95));
+		nvgText(args.vg, w/2.f, 173.f, "DIM", nullptr);
 
-			// Labels
-			nvgText(args.vg, w/2.f, RACK_GRID_HEIGHT - 80.f, "IN", nullptr);
-		}
+		// IN label
+		nvgText(args.vg, w/2.f, RACK_GRID_HEIGHT - 68.f, "IN", nullptr);
 
 		ModuleWidget::draw(args);
 	}
