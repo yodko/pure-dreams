@@ -251,7 +251,7 @@ struct PureDreamsWidget : ModuleWidget {
 		addParam(createParamCentered<Trimpot>(Vec(cx, 152.f), module, PureDreams::BRIGHTNESS_PARAM));
 		// Smoothing slider + flicker light showing smoothed signal
 		addParam(createParamCentered<VCVSlider>(Vec(cx, 230.f), module, PureDreams::SMOOTH_PARAM));
-		addChild(createLight<SmallLight<GreenLight>>(Vec(cx + 10.f, 177.f), module, PureDreams::SMOOTH_LIGHT));
+		addChild(createLight<SmallLight<GreenLight>>(Vec(cx - 2.9f, 230.f - 2.9f), module, PureDreams::SMOOTH_LIGHT));
 		// Audio input
 		addInput(createInputCentered<PJ301MPort>(Vec(cx, RACK_GRID_HEIGHT - 50.f), module, PureDreams::AUDIO_INPUT));
 	}
@@ -380,10 +380,10 @@ struct PureDreamsWidget : ModuleWidget {
 		nvgFillColor(args.vg, nvgRGB(45,45,38));
 		boldText(w/2.f, 167.f, "DIM");
 
-		// Smooth label above slider
+		// Smooth label below slider
 		nvgFontSize(args.vg, 7.f);
 		nvgFillColor(args.vg, nvgRGB(55,55,48));
-		boldText(w/2.f, 176.f, "SMOOTH");
+		boldText(w/2.f, 283.f, "SMOOTH");
 
 		// Socket surround — elongated to include IN inside
 		{
