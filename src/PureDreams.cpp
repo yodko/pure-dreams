@@ -224,7 +224,7 @@ struct PureDreamsWidget : ModuleWidget {
 		}
 		// Buttons below LEDs
 		addParam(createParamCentered<TL1105>(Vec(cx, 82.f), module, PureDreams::NEXT_PARAM));
-		addParam(createParamCentered<TL1105>(Vec(cx, 117.f), module, PureDreams::PREV_PARAM));
+		addParam(createParamCentered<TL1105>(Vec(cx, 108.f), module, PureDreams::PREV_PARAM));
 		// Brightness knob
 		addParam(createParamCentered<Trimpot>(Vec(cx, 152.f), module, PureDreams::BRIGHTNESS_PARAM));
 		// Audio input
@@ -348,7 +348,7 @@ struct PureDreamsWidget : ModuleWidget {
 		nvgFontSize(args.vg, 11.f);
 		nvgFillColor(args.vg, nvgRGB(32,32,26));
 		thinText(w/2.f, 68.f, "+");
-		thinText(w/2.f, 131.f, "–");
+		thinText(w/2.f, 122.f, "–");
 
 		// Brightness label
 		nvgFontSize(args.vg, 9.f);
