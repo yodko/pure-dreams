@@ -1,6 +1,6 @@
 # Pure Dreams — `('-')`
 
-A VCV Rack 2 module that replaces the grey rack background with audio-reactive [MilkDrop](https://en.wikipedia.org/wiki/MilkDrop) visuals powered by [projectM](https://github.com/projectM-visualizer/projectm).
+A VCV Rack 2 module that replaces the background with audio-reactive [MilkDrop](https://en.wikipedia.org/wiki/MilkDrop) visuals powered by [projectM](https://github.com/projectM-visualizer/projectm).
 
 ![Pure Dreams demo](res/demo3.gif)
 
