@@ -327,10 +327,14 @@ struct PureDreamsWidget : ModuleWidget {
 		drawScrew(w/2.f, 8.f);
 		drawScrew(w/2.f, h-8.f);
 
-		// Bold text helper — draws twice for faux-bold
+		// Bold helpers — slight offset = faux bold
 		auto boldText = [&](float x, float y, const char* t) {
 			nvgText(args.vg, x,       y, t, nullptr);
-			nvgText(args.vg, x+0.6f,  y, t, nullptr);
+			nvgText(args.vg, x+0.4f,  y, t, nullptr); // normal bold
+		};
+		auto thinText = [&](float x, float y, const char* t) {
+			nvgText(args.vg, x,       y, t, nullptr);
+			nvgText(args.vg, x+0.2f,  y, t, nullptr); // half bold for + and -
 		};
 
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER|NVG_ALIGN_MIDDLE);
@@ -340,11 +344,11 @@ struct PureDreamsWidget : ModuleWidget {
 		nvgFillColor(args.vg, nvgRGB(28,28,22));
 		boldText(w/2.f, 22.f, "('-')");
 
-		// + above top button, - below bottom button
+		// + above top button, - below bottom button (thinner than rest)
 		nvgFontSize(args.vg, 11.f);
 		nvgFillColor(args.vg, nvgRGB(32,32,26));
-		boldText(w/2.f, 64.f, "+");
-		boldText(w/2.f, 113.f, "-");
+		thinText(w/2.f, 64.f, "+");
+		thinText(w/2.f, 113.f, "-");
 
 		// Brightness label
 		nvgFontSize(args.vg, 9.f);
