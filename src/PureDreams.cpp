@@ -312,19 +312,17 @@ struct PureDreamsWidget : ModuleWidget {
 		drawScrew(w/2.f, 8.f);
 		drawScrew(w/2.f, h-8.f);
 
-		// Bold PURE DREAMS title
-		nvgFontSize(args.vg, 8.f);
-		nvgFillColor(args.vg, nvgRGB(45,45,40));
+		// Title: ('-')
+		nvgFontSize(args.vg, 7.5f);
+		nvgFillColor(args.vg, nvgRGB(50,50,45));
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER|NVG_ALIGN_MIDDLE);
-		nvgText(args.vg, w/2.f, 21.f, "PURE", nullptr);
-		nvgText(args.vg, w/2.f, 30.f, "DREAMS", nullptr);
+		nvgText(args.vg, w/2.f, 25.f, "('-')", nullptr);
 
-		// Labels: + above next button, ('-') below prev button
+		// + above top button, - below bottom button
 		nvgFontSize(args.vg, 8.f);
 		nvgFillColor(args.vg, nvgRGB(60,60,55));
 		nvgText(args.vg, w/2.f, 44.f, "+", nullptr);
-		nvgFontSize(args.vg, 6.f);
-		nvgText(args.vg, w/2.f, 89.f, "('-')", nullptr);
+		nvgText(args.vg, w/2.f, 89.f, "-", nullptr);
 
 		// Brightness label
 		nvgFontSize(args.vg, 6.5f);
