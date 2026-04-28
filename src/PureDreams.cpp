@@ -221,12 +221,24 @@ struct PureDreamsWidget : ModuleWidget {
 	}
 
 	~PureDreamsWidget() {
+		// Null module's pdWin FIRST — audio thread checks this in process()
+		PureDreams* m = dynamic_cast<PureDreams*>(this->module);
+		if (m) m->pdWin = nullptr;
+
 		if (rackBg) {
 			if (APP && APP->scene && APP->scene->rack)
 				APP->scene->rack->removeChild(rackBg);
 			delete rackBg; rackBg = nullptr;
 		}
-		if (pdWin) { pdWin->close(); delete pdWin; pdWin = nullptr; }
+
+		// Close render thread, then defer delete to after engine removes module
+		// (Engine::removeModule runs in ModuleWidget::~ModuleWidget after our body)
+		if (pdWin) {
+			pdWin->close();
+			PDWindow* pw = pdWin;
+			pdWin = nullptr;
+			dispatch_async(dispatch_get_main_queue(), ^{ delete pw; });
+		}
 	}
 
 	void step() override {
