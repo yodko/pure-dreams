@@ -250,8 +250,7 @@ struct PureDreamsWidget : ModuleWidget {
 		// Brightness knob
 		addParam(createParamCentered<Trimpot>(Vec(cx, 152.f), module, PureDreams::BRIGHTNESS_PARAM));
 		// Smoothing slider + flicker light showing smoothed signal
-		addParam(createParamCentered<VCVSlider>(Vec(cx, 230.f), module, PureDreams::SMOOTH_PARAM));
-		addChild(createLight<SmallLight<GreenLight>>(Vec(cx - 2.9f, 230.f - 2.9f), module, PureDreams::SMOOTH_LIGHT));
+		addParam(createLightParamCentered<VCVLightSlider<GreenLight>>(Vec(cx, 230.f), module, PureDreams::SMOOTH_PARAM, PureDreams::SMOOTH_LIGHT));
 		// Audio input
 		addInput(createInputCentered<PJ301MPort>(Vec(cx, RACK_GRID_HEIGHT - 50.f), module, PureDreams::AUDIO_INPUT));
 	}
