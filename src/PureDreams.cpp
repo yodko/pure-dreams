@@ -117,7 +117,7 @@ struct PureDreams : Module {
 		// Drive binary LED lights from current preset index
 		int idx = pdWin->currentPresetIndex.load();
 		for (int i = 0; i < 9; i++)
-			lights[BIT_LIGHTS + i].setBrightness((idx >> (8 - i)) & 1 ? 1.f : 0.f);
+			lights[BIT_LIGHTS + i].setBrightness((idx >> (8 - i)) & 1 ? 0.45f : 0.f);
 	}
 };
 
@@ -150,6 +150,22 @@ struct PresetItem : MenuItem {
 	}
 };
 
+
+// ── Transparent hover widget for LED tooltip ─────────────────────────────────
+
+struct LEDTooltipArea : Widget {
+	PDWindow* pdWin  = nullptr;
+	int       total  = 413;
+
+	LEDTooltipArea() { box.size = Vec(26, 26); }
+	void onHover(const HoverEvent& e) override { e.consume(this); }
+	ui::Tooltip* createTooltip() {
+		auto* t = new ui::Tooltip;
+		int idx = pdWin ? pdWin->currentPresetIndex.load() : 0;
+		t->text = string::f("%d / %d", idx + 1, total);
+		return t;
+	}
+};
 
 // ── Widget ────────────────────────────────────────────────────────────────────
 
@@ -190,6 +206,13 @@ struct PureDreamsWidget : ModuleWidget {
 			float x = 5.f + col * 7.f;
 			float y = 96.f + row * 7.f;
 			addChild(createLight<SmallLight<GreenLight>>(Vec(x, y), module, PureDreams::BIT_LIGHTS + i));
+		}
+		// Transparent hover area over LEDs for tooltip
+		if (module) {
+			auto* tip = createWidget<LEDTooltipArea>(Vec(2.f, 93.f));
+			tip->pdWin = pdWin;
+			tip->total = (int)allPresets().size();
+			addChild(tip);
 		}
 	}
 
@@ -295,7 +318,7 @@ struct PureDreamsWidget : ModuleWidget {
 		// Button labels — + above, - below
 		nvgFontSize(args.vg, 7.f);
 		nvgFillColor(args.vg, nvgRGB(90,90,85));
-		nvgText(args.vg, w/2.f, 46.f, "+", nullptr);
+		nvgText(args.vg, w/2.f, 42.f, "+", nullptr);
 		nvgText(args.vg, w/2.f, 84.f, "-", nullptr);
 
 		// Brightness label
