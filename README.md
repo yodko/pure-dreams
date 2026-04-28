@@ -8,6 +8,10 @@ Drop it anywhere in your rack. The entire background becomes a live visualiser t
 
 ![Pure Dreams demo 2](res/demo2.gif)
 
+![Pure Dreams demo 3](res/demo3.gif)
+
+![Pure Dreams demo 4](res/demo4.gif)
+
 ---
 
 ## Controls
