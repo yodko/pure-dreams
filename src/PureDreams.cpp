@@ -223,10 +223,10 @@ struct PureDreamsWidget : ModuleWidget {
 			addChild(tip);
 		}
 		// Buttons below LEDs
-		addParam(createParamCentered<TL1105>(Vec(cx, 85.f), module, PureDreams::NEXT_PARAM));
-		addParam(createParamCentered<TL1105>(Vec(cx, 130.f), module, PureDreams::PREV_PARAM));
+		addParam(createParamCentered<TL1105>(Vec(cx, 82.f), module, PureDreams::NEXT_PARAM));
+		addParam(createParamCentered<TL1105>(Vec(cx, 117.f), module, PureDreams::PREV_PARAM));
 		// Brightness knob
-		addParam(createParamCentered<Trimpot>(Vec(cx, 175.f), module, PureDreams::BRIGHTNESS_PARAM));
+		addParam(createParamCentered<Trimpot>(Vec(cx, 152.f), module, PureDreams::BRIGHTNESS_PARAM));
 		// Audio input
 		addInput(createInputCentered<PJ301MPort>(Vec(cx, RACK_GRID_HEIGHT - 50.f), module, PureDreams::AUDIO_INPUT));
 	}
@@ -347,13 +347,13 @@ struct PureDreamsWidget : ModuleWidget {
 		// + above top button, - below bottom button (thinner than rest)
 		nvgFontSize(args.vg, 11.f);
 		nvgFillColor(args.vg, nvgRGB(32,32,26));
-		thinText(w/2.f, 70.f, "+");
-		thinText(w/2.f, 144.f, "-");
+		thinText(w/2.f, 68.f, "+");
+		thinText(w/2.f, 131.f, "—");
 
 		// Brightness label
 		nvgFontSize(args.vg, 9.f);
 		nvgFillColor(args.vg, nvgRGB(45,45,38));
-		boldText(w/2.f, 192.f, "DIM");
+		boldText(w/2.f, 167.f, "DIM");
 
 		// Socket surround — elongated to include IN inside
 		{
