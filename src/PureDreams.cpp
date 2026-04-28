@@ -313,20 +313,20 @@ struct PureDreamsWidget : ModuleWidget {
 		drawScrew(w/2.f, h-8.f);
 
 		// Title: ('-')
-		nvgFontSize(args.vg, 7.5f);
-		nvgFillColor(args.vg, nvgRGB(50,50,45));
+		nvgFontSize(args.vg, 9.5f);
+		nvgFillColor(args.vg, nvgRGB(30,30,25));
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER|NVG_ALIGN_MIDDLE);
 		nvgText(args.vg, w/2.f, 25.f, "('-')", nullptr);
 
 		// + above top button, - below bottom button
-		nvgFontSize(args.vg, 8.f);
-		nvgFillColor(args.vg, nvgRGB(60,60,55));
+		nvgFontSize(args.vg, 10.f);
+		nvgFillColor(args.vg, nvgRGB(35,35,30));
 		nvgText(args.vg, w/2.f, 44.f, "+", nullptr);
 		nvgText(args.vg, w/2.f, 89.f, "-", nullptr);
 
 		// Brightness label
-		nvgFontSize(args.vg, 6.5f);
-		nvgFillColor(args.vg, nvgRGB(80,80,75));
+		nvgFontSize(args.vg, 10.5f);
+		nvgFillColor(args.vg, nvgRGB(50,50,45));
 		nvgText(args.vg, w/2.f, 173.f, "DIM", nullptr);
 
 		// Socket surround — elongated to include IN inside
@@ -342,8 +342,8 @@ struct PureDreamsWidget : ModuleWidget {
 			nvgStrokeColor(args.vg, nvgRGB(175,175,170));
 			nvgStrokeWidth(args.vg, 1.f); nvgStroke(args.vg);
 			// Bold IN inside the box
-			nvgFontSize(args.vg, 8.5f);
-			nvgFillColor(args.vg, nvgRGB(50,50,45));
+			nvgFontSize(args.vg, 10.5f);
+			nvgFillColor(args.vg, nvgRGB(30,30,25));
 			nvgText(args.vg, sx, sy + sw2 + 5.f, "IN", nullptr);
 		}
 
