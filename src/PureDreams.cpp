@@ -127,15 +127,11 @@ struct PureDreams : Module {
 		smoothed    = smoothed * coeff + raw * (1.f - coeff);
 		pdWin->addSample(smoothed, smoothed);
 
-		// Envelope follower for LED: instant attack, variable release
-		// s=0: release ~700ms → LED stays on (full signal passing)
-		// s=1: release ~0.7ms → LED mostly off (signal heavily smoothed away)
-		float absRaw   = std::abs(raw);
-		float relCoeff = 1.f - std::pow(10.f, -4.5f + s * 3.f);
-		if (absRaw >= envelope)
-			envelope = absRaw;
-		else
-			envelope *= relCoeff;
+		// LED: same IIR applied to rectified signal
+		// s=0 → coeff=0 → LED = abs(raw) directly → erratic flicker
+		// s=1 → coeff=0.9999 → LED follows slow amplitude envelope → calm
+		float absRaw = std::abs(raw);
+		envelope = envelope * coeff + absRaw * (1.f - coeff);
 		lights[SMOOTH_LIGHT].setBrightness(envelope * 2.f);
 		// Drive binary LED lights from current preset index
 		int idx = pdWin->currentPresetIndex.load();
