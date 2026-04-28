@@ -128,10 +128,10 @@ struct PureDreams : Module {
 		pdWin->addSample(smoothed, smoothed);
 
 		// Envelope follower for LED: instant attack, variable release
-		// s=0: release ~22ms → 10-20 flickers/sec
+		// s=0: release ~0.7ms → fast flicker (tracks individual audio peaks)
 		// s=1: release ~700ms → 1-2 flickers/sec
 		float absRaw   = std::abs(raw);
-		float relCoeff = 1.f - std::pow(10.f, -3.f - s * 1.5f);
+		float relCoeff = 1.f - std::pow(10.f, -1.5f - s * 3.f);
 		if (absRaw >= envelope)
 			envelope = absRaw;
 		else
