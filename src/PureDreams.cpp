@@ -83,7 +83,7 @@ struct PureDreams : Module {
 	enum ParamId  { PREV_PARAM, NEXT_PARAM, BRIGHTNESS_PARAM, SMOOTH_PARAM, PRESET_IDX_PARAM, PARAMS_LEN };
 	enum InputId  { AUDIO_INPUT, INPUTS_LEN };
 	enum OutputId { OUTPUTS_LEN };
-	enum LightId  { BIT_LIGHTS, LIGHTS_LEN = BIT_LIGHTS + 9 };
+	enum LightId  { BIT_LIGHTS, SMOOTH_LIGHT = BIT_LIGHTS + 9, LIGHTS_LEN };
 
 	dsp::SchmittTrigger nextTrig, prevTrig;
 	PDWindow* pdWin = nullptr;
@@ -122,6 +122,8 @@ struct PureDreams : Module {
 		float coeff = params[SMOOTH_PARAM].getValue(); // 0=raw, 0.97=very smooth
 		smoothed    = smoothed * coeff + raw * (1.f - coeff);
 		pdWin->addSample(smoothed, smoothed);
+		// Flicker light shows smoothed audio level — slow with more smoothing
+		lights[SMOOTH_LIGHT].setBrightness(std::abs(smoothed) * 3.f);
 		// Drive binary LED lights from current preset index
 		int idx = pdWin->currentPresetIndex.load();
 		for (int i = 0; i < 9; i++)
@@ -231,8 +233,9 @@ struct PureDreamsWidget : ModuleWidget {
 		addParam(createParamCentered<TL1105>(Vec(cx, 108.f), module, PureDreams::PREV_PARAM));
 		// Brightness knob
 		addParam(createParamCentered<Trimpot>(Vec(cx, 152.f), module, PureDreams::BRIGHTNESS_PARAM));
-		// Smoothing slider (vertical, between DIM and IN)
+		// Smoothing slider + flicker light showing smoothed signal
 		addParam(createParamCentered<VCVSlider>(Vec(cx, 230.f), module, PureDreams::SMOOTH_PARAM));
+		addChild(createLight<SmallLight<GreenLight>>(Vec(cx + 10.f, 177.f), module, PureDreams::SMOOTH_LIGHT));
 		// Audio input
 		addInput(createInputCentered<PJ301MPort>(Vec(cx, RACK_GRID_HEIGHT - 50.f), module, PureDreams::AUDIO_INPUT));
 	}
