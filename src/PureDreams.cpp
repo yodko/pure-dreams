@@ -319,10 +319,12 @@ struct PureDreamsWidget : ModuleWidget {
 		nvgText(args.vg, w/2.f, 21.f, "PURE", nullptr);
 		nvgText(args.vg, w/2.f, 30.f, "DREAMS", nullptr);
 
-		// + label above top button only (removed - label)
+		// Labels: + above next button, ('-') below prev button
 		nvgFontSize(args.vg, 8.f);
 		nvgFillColor(args.vg, nvgRGB(60,60,55));
 		nvgText(args.vg, w/2.f, 44.f, "+", nullptr);
+		nvgFontSize(args.vg, 6.f);
+		nvgText(args.vg, w/2.f, 89.f, "('-')", nullptr);
 
 		// Brightness label
 		nvgFontSize(args.vg, 6.5f);
