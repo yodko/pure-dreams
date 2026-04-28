@@ -154,9 +154,10 @@ struct PresetItem : MenuItem {
 // ── Widget ────────────────────────────────────────────────────────────────────
 
 struct PureDreamsWidget : ModuleWidget {
-	PDWindow*     pdWin    = nullptr;
-	RackBgWidget* rackBg   = nullptr;
-	bool          restored = false;
+	PDWindow*     pdWin         = nullptr;
+	RackBgWidget* rackBg        = nullptr;
+	bool          restored      = false;
+	int           saveDelay     = 0;  // frames to wait after preset change before saving
 
 	PureDreamsWidget(PureDreams* module) {
 		setModule(module);
@@ -176,8 +177,8 @@ struct PureDreamsWidget : ModuleWidget {
 
 		float cx = box.size.x / 2.f;
 		// Buttons side by side
-		addParam(createParamCentered<TL1105>(Vec(8.f,  55.f), module, PureDreams::PREV_PARAM));
-		addParam(createParamCentered<TL1105>(Vec(22.f, 55.f), module, PureDreams::NEXT_PARAM));
+		addParam(createParamCentered<TL1105>(Vec(cx, 45.f), module, PureDreams::NEXT_PARAM));
+		addParam(createParamCentered<TL1105>(Vec(cx, 62.f), module, PureDreams::PREV_PARAM));
 		// Brightness knob
 		addParam(createParamCentered<Trimpot>(Vec(cx, 160.f), module, PureDreams::BRIGHTNESS_PARAM));
 		// Audio input
@@ -188,7 +189,7 @@ struct PureDreamsWidget : ModuleWidget {
 			int row = i / 3, col = i % 3;
 			float x = 5.f + col * 7.f;
 			float y = 85.f + row * 7.f;
-			addChild(createLight<SmallLight<YellowLight>>(Vec(x, y), module, PureDreams::BIT_LIGHTS + i));
+			addChild(createLight<SmallLight<GreenLight>>(Vec(x, y), module, PureDreams::BIT_LIGHTS + i));
 		}
 	}
 
@@ -211,11 +212,11 @@ struct PureDreamsWidget : ModuleWidget {
 		if (m && pdWin) {
 			if (m->nextTrig.process(m->params[PureDreams::NEXT_PARAM].getValue()) > 0.f) {
 				pdWin->requestNext = true;
-				m->presetExplicitlyChanged = true;
+				saveDelay = 30; // wait 30 frames for projectM to update name
 			}
 			if (m->prevTrig.process(m->params[PureDreams::PREV_PARAM].getValue()) > 0.f) {
 				pdWin->requestPrev = true;
-				m->presetExplicitlyChanged = true;
+				saveDelay = 30;
 			}
 			if (rackBg)
 				rackBg->brightness = m->params[PureDreams::BRIGHTNESS_PARAM].getValue();
@@ -232,15 +233,22 @@ struct PureDreamsWidget : ModuleWidget {
 				}
 			}
 
-			// Only save preset name when user explicitly changed it (not on restore)
-			if (m->presetExplicitlyChanged) {
-				std::lock_guard<std::mutex> nl(pdWin->nameMutex);
-				if (!pdWin->currentPresetName.empty()) {
-					m->savedPresetName = pdWin->currentPresetName;
-					int idx = pdWin->currentPresetIndex.load();
-					APP->engine->setParamValue(m, PureDreams::PRESET_IDX_PARAM, (float)idx);
-					m->presetExplicitlyChanged = false;
+			// After delay, save the current preset name (render thread has had time to update it)
+			if (saveDelay > 0) {
+				if (--saveDelay == 0) {
+					std::lock_guard<std::mutex> nl(pdWin->nameMutex);
+					if (!pdWin->currentPresetName.empty()) {
+						m->savedPresetName = pdWin->currentPresetName;
+						int idx = pdWin->currentPresetIndex.load();
+						APP->engine->setParamValue(m, PureDreams::PRESET_IDX_PARAM, (float)idx);
+					}
 				}
+			}
+
+			// Also save on menu selection (presetExplicitlyChanged set by PresetItem)
+			if (m->presetExplicitlyChanged) {
+				m->presetExplicitlyChanged = false;
+				saveDelay = 30;
 			}
 		}
 		ModuleWidget::step();
@@ -284,11 +292,11 @@ struct PureDreamsWidget : ModuleWidget {
 		nvgText(args.vg, w/2.f, 22.f, "PURE", nullptr);
 		nvgText(args.vg, w/2.f, 30.f, "DREAMS", nullptr);
 
-		// Button labels
+		// Button labels — + above, - below
 		nvgFontSize(args.vg, 7.f);
 		nvgFillColor(args.vg, nvgRGB(90,90,85));
-		nvgText(args.vg,  8.f, 67.f, "-", nullptr);
-		nvgText(args.vg, 22.f, 67.f, "+", nullptr);
+		nvgText(args.vg, w/2.f, 37.f, "+", nullptr);
+		nvgText(args.vg, w/2.f, 73.f, "-", nullptr);
 
 		// Brightness label
 		nvgFontSize(args.vg, 6.f);
