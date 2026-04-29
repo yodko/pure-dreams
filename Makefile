@@ -21,10 +21,8 @@ CXXFLAGS += $(shell pkg-config --cflags libprojectM 2>/dev/null || echo "-I/usr/
 LDFLAGS  += $(shell pkg-config --libs   libprojectM 2>/dev/null || echo "-lprojectM") -lGL
 SOURCES  += src/PDWindow_glfw.cpp
 else
-# Windows (MSYS2 UCRT64): GLFW offscreen + projectM v3
-CXXFLAGS += -I/ucrt64/include/libprojectM
-LDFLAGS  += -lprojectM -lopengl32
-SOURCES  += src/PDWindow_glfw.cpp
+# Windows (MSYS2 UCRT64): stub until projectM is available as an MSYS2 package
+SOURCES  += src/PDWindow_stub.cpp
 endif
 
 include $(RACK_DIR)/plugin.mk
