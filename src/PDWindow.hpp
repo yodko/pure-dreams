@@ -32,6 +32,9 @@ struct PDWindow {
 	std::string currentPresetName;
 	std::atomic<int> currentPresetIndex{0};
 
+	// Set before calling open() — path to directory containing .milk files
+	std::string presetDir;
+
 	// PCM audio feed (stereo interleaved, written by audio thread)
 	static const int PCM_SIZE = 512;
 	std::mutex pcmMutex;

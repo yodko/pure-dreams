@@ -20,17 +20,9 @@
 #include <dirent.h>
 #include <algorithm>
 
-// Default preset directory per platform.
-// The user needs projectM presets installed; see README.
-#ifdef ARCH_WIN
-static const char* DEFAULT_PRESET_DIR = "C:\\Program Files\\projectM\\presets";
-#elif defined(ARCH_LIN)
-static const char* DEFAULT_PRESET_DIR = "/usr/share/projectM/presets";
-#else
-// macOS — Homebrew arm64 default
-static const char* DEFAULT_PRESET_DIR =
-    "/opt/homebrew/share/projectM/presets";
-#endif
+// Preset directory is set via PDWindow::presetDir before open() is called.
+// PureDreamsWidget sets it to asset::plugin(pluginInstance, "res/presets")
+// so bundled presets are used on all platforms with no user setup.
 
 // Scan a directory for .milk preset files and return their full paths sorted.
 static std::vector<std::string> scan_presets(const char* dir) {
@@ -144,7 +136,7 @@ void PDWindow::loop() {
     projectm_set_preset_locked(pm, true);
 
     // Scan preset directory and load the first preset
-    std::vector<std::string> presetPaths = scan_presets(DEFAULT_PRESET_DIR);
+    std::vector<std::string> presetPaths = scan_presets(presetDir.c_str());
     int presetIdx = 0;
     if (!presetPaths.empty()) {
         projectm_load_preset_file(pm, presetPaths[0].c_str(), false);

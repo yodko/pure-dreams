@@ -4,18 +4,18 @@
 #include <algorithm>
 #include <dirent.h>
 
-#ifdef ARCH_WIN
-static const char* PRESET_DIR = "C:\\Program Files\\projectM\\presets";
-#elif defined(ARCH_LIN)
-static const char* PRESET_DIR = "/usr/share/projectM/presets";
-#else
-static const char* PRESET_DIR = "/opt/homebrew/share/projectM/presets";
-#endif
+// Preset directory is resolved at first use via asset::plugin() so it
+// always points to the bundled res/presets/ folder inside the plugin package.
+// Works on all platforms with zero user setup.
+static const std::string& presetDir() {
+	static std::string dir = asset::plugin(pluginInstance, "res/presets");
+	return dir;
+}
 
 static std::vector<std::string>& allPresets() {
 	static std::vector<std::string> ps = []() {
 		std::vector<std::string> v;
-		DIR* d = opendir(PRESET_DIR);
+		DIR* d = opendir(presetDir().c_str());
 		if (!d) return v;
 		struct dirent* e;
 		while ((e = readdir(d))) {
@@ -201,7 +201,8 @@ struct PureDreamsWidget : ModuleWidget {
 		box.size = Vec(2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT);
 
 		if (module) {
-			pdWin  = new PDWindow();
+			pdWin            = new PDWindow();
+			pdWin->presetDir = asset::plugin(pluginInstance, "res/presets");
 			pdWin->open();
 			rackBg = new RackBgWidget(pdWin);
 			auto& ch = APP->scene->rack->children;
