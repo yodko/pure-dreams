@@ -152,14 +152,11 @@ void PDWindow::loop() {
     std::vector<std::string> presetPaths = scan_presets(presetDir.c_str());
     int presetIdx = 0;
     if (!presetPaths.empty()) {
-        auto it = std::find_if(presetPaths.begin(), presetPaths.end(),
-            [](const std::string& p) { return p.find(DEFAULT_PRESET_HINT) != std::string::npos; });
-        if (it != presetPaths.end()) presetIdx = (int)std::distance(presetPaths.begin(), it);
-        projectm_load_preset_file(pm, presetPaths[presetIdx].c_str(), false);
+        projectm_load_preset_file(pm, presetPaths[0].c_str(), false);
         projectm_set_preset_locked(pm, true);
         std::lock_guard<std::mutex> nl(nameMutex);
-        currentPresetName  = presetPaths[presetIdx];
-        currentPresetIndex = presetIdx;
+        currentPresetName  = presetPaths[0];
+        currentPresetIndex = 0;
     }
 
     while (running) {
