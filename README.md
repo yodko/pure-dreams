@@ -14,5 +14,5 @@ A VCV Rack 2 module that replaces the background with audio-reactive [MilkDrop](
 drop `.milk` files into the plugin's preset folder, then restart Rack
 
 - macOS — `~/Library/Application Support/Rack2/plugins-mac-arm64/PureDreams/res/presets/`
-- Linux — `~/.Rack2/plugins-lin-x64/PureDreams/res/presets/`
+- Linux — `~/.local/share/Rack2/plugins-lin-x64/PureDreams/res/presets/`
 - Windows — `%LOCALAPPDATA%\Rack2\plugins-win-x64\PureDreams\res\presets\`
