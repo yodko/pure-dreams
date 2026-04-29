@@ -54,6 +54,7 @@ else ifdef ARCH_MAC
 		-DENABLE_PLAYLIST=OFF \
 		-DUSE_SYSTEM_PROJECTM_EVAL=OFF \
 		-DCMAKE_PREFIX_PATH=/opt/homebrew \
+		-DCMAKE_CXX_FLAGS="-I/opt/homebrew/include" \
 		-DCMAKE_INSTALL_PREFIX=. \
 		..
 else
