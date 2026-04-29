@@ -9,9 +9,7 @@ static const char* PRESET_DIR = "C:\\Program Files\\projectM\\presets";
 #elif defined(ARCH_LIN)
 static const char* PRESET_DIR = "/usr/share/projectM/presets";
 #else
-// macOS: Homebrew arm64 default — override with PROJECTM_PREFIX env var at build time
-static const char* PRESET_DIR =
-	"/opt/homebrew/Cellar/projectm/3.1.12/share/projectM/presets/presets_bltc201";
+static const char* PRESET_DIR = "/opt/homebrew/share/projectM/presets";
 #endif
 
 static std::vector<std::string>& allPresets() {

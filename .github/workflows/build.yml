@@ -25,18 +25,18 @@ jobs:
           python validator.py plugin.json
 
   build-mac:
-    name: Build (macOS ARM64 — full projectM)
+    name: Build (macOS ARM64)
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
-      - name: Install projectM
-        run: brew install projectm
+        with:
+          submodules: recursive
       - name: Download Rack SDK
         run: |
           curl -fsSL "https://vcvrack.com/downloads/Rack-SDK-${{ env.RACK_SDK_VERSION }}-mac-arm64.zip" -o rack-sdk.zip
           unzip -q rack-sdk.zip
-      - name: Build
-        run: make RACK_DIR=Rack-SDK
+      - name: Build projectM + plugin
+        run: make dep && make RACK_DIR=Rack-SDK
       - name: Verify binary
         run: |
           test -f plugin.dylib || (echo "plugin.dylib not found" && exit 1)
@@ -56,12 +56,14 @@ jobs:
           path: PureDreams/
 
   build-linux:
-    name: Build (Linux x64 — full projectM)
+    name: Build (Linux x64)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install dependencies
-        run: sudo apt-get install -y libprojectm-dev libgl-dev
+        with:
+          submodules: recursive
+      - name: Install GL headers
+        run: sudo apt-get install -y libgl-dev cmake
       - name: Static analysis
         run: |
           sudo apt-get install -y cppcheck
@@ -71,8 +73,8 @@ jobs:
         run: |
           curl -fsSL "https://vcvrack.com/downloads/Rack-SDK-${{ env.RACK_SDK_VERSION }}-lin-x64.zip" -o rack-sdk.zip
           unzip -q rack-sdk.zip
-      - name: Build
-        run: make RACK_DIR=Rack-SDK
+      - name: Build projectM + plugin
+        run: make dep && make RACK_DIR=Rack-SDK
       - name: Verify binary
         run: |
           test -f plugin.so || (echo "plugin.so not found" && exit 1)
@@ -94,13 +96,15 @@ jobs:
           path: PureDreams/
 
   build-windows:
-    name: Build (Windows x64 — stub, projectM pending)
+    name: Build (Windows x64)
     runs-on: windows-latest
     defaults:
       run:
         shell: msys2 {0}
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: msys2/setup-msys2@v2
         with:
           msystem: UCRT64
@@ -109,6 +113,7 @@ jobs:
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-make
             mingw-w64-ucrt-x86_64-binutils
+            mingw-w64-ucrt-x86_64-cmake
             make
             unzip
             curl
@@ -117,8 +122,8 @@ jobs:
         run: |
           curl -fsSL "https://vcvrack.com/downloads/Rack-SDK-${{ env.RACK_SDK_VERSION }}-win-x64.zip" -o rack-sdk.zip
           unzip -q rack-sdk.zip
-      - name: Build
-        run: make RACK_DIR=Rack-SDK
+      - name: Build projectM + plugin
+        run: make dep && make RACK_DIR=Rack-SDK
       - name: Verify binary
         run: |
           test -f plugin.dll || (echo "plugin.dll not found" && exit 1)

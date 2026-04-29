@@ -1,151 +1,210 @@
-// PDWindow_glfw.cpp — Linux and Windows implementation
-// Uses a hidden GLFW window as an offscreen OpenGL context.
-// Mirrors the structure of PDWindow.mm exactly — same thread model,
-// same glReadPixels pixel readback, same projectM v3 C++ API.
+// PDWindow_glfw.cpp — unified projectM v4 implementation for macOS, Linux, Windows
+//
+// Replaces both PDWindow.mm (Cocoa) and the old stub.
+// Uses a hidden GLFW window for the offscreen OpenGL context — the same
+// GLFW that VCV Rack already bundles. No Cocoa, no dispatch_async, no
+// platform-specific threading tricks: GLFW handles all of that.
+//
+// Thread model:
+//   open()  — called on the UI thread (PureDreamsWidget constructor)
+//             creates the hidden GLFW window, then spawns the render thread
+//   loop()  — render thread: makes the offscreen context current, runs
+//             projectM, reads pixels back, stores them for draw()
+//   close() — called on the UI thread (~PureDreamsWidget): signals the
+//             render thread to stop, joins it, destroys the GLFW window
 
-#define GL_SILENCE_DEPRECATION
 #include "PDWindow.hpp"
-#include <libprojectM/projectM.hpp>
+#include <projectM-4/projectM.h>
 #include <GLFW/glfw3.h>
 
-// Default preset search paths per platform.
-// User can override by symlinking or installing projectM to these locations.
+#include <dirent.h>
+#include <algorithm>
+
+// Default preset directory per platform.
+// The user needs projectM presets installed; see README.
 #ifdef ARCH_WIN
 static const char* DEFAULT_PRESET_DIR = "C:\\Program Files\\projectM\\presets";
-#else
+#elif defined(ARCH_LIN)
 static const char* DEFAULT_PRESET_DIR = "/usr/share/projectM/presets";
+#else
+// macOS — Homebrew arm64 default
+static const char* DEFAULT_PRESET_DIR =
+    "/opt/homebrew/share/projectM/presets";
 #endif
 
-void PDWindow::addSample(float L, float R) {
-	if (closing) return;
-	std::lock_guard<std::mutex> lock(pcmMutex);
-	if (pcmPos < PCM_SIZE * 2) {
-		pcmBuf[pcmPos++] = L;
-		pcmBuf[pcmPos++] = R;
-		if (pcmPos >= PCM_SIZE * 2) {
-			pcmReady = true;
-			pcmPos   = 0;
-		}
-	}
+// Scan a directory for .milk preset files and return their full paths sorted.
+static std::vector<std::string> scan_presets(const char* dir) {
+    std::vector<std::string> paths;
+    DIR* d = opendir(dir);
+    if (!d) return paths;
+    struct dirent* e;
+    while ((e = readdir(d))) {
+        std::string n = e->d_name;
+        if (n.size() > 5 && n.substr(n.size() - 5) == ".milk")
+            paths.push_back(std::string(dir) + "/" + n);
+    }
+    closedir(d);
+    std::sort(paths.begin(), paths.end());
+    return paths;
 }
+
+// ── addSample ────────────────────────────────────────────────────────────────
+
+void PDWindow::addSample(float L, float R) {
+    if (closing) return;
+    std::lock_guard<std::mutex> lock(pcmMutex);
+    if (pcmPos < PCM_SIZE * 2) {
+        pcmBuf[pcmPos++] = L;
+        pcmBuf[pcmPos++] = R;
+        if (pcmPos >= PCM_SIZE * 2) {
+            pcmReady = true;
+            pcmPos   = 0;
+        }
+    }
+}
+
+// ── open ─────────────────────────────────────────────────────────────────────
 
 void PDWindow::open() {
-	pixels.resize(pixelW * pixelH * 4, 0);
-	for (int i = 0; i < pixelW * pixelH * 4; i += 4) {
-		pixels[i+0] = 10; pixels[i+1] = 10; pixels[i+2] = 14; pixels[i+3] = 255;
-	}
-	pixelsDirty = true;
+    pixels.resize(pixelW * pixelH * 4, 0);
+    for (int i = 0; i < pixelW * pixelH * 4; i += 4) {
+        pixels[i+0] = 10; pixels[i+1] = 10; pixels[i+2] = 14; pixels[i+3] = 255;
+    }
+    pixelsDirty = true;
 
-	// Create a hidden window — this gives us an offscreen GL context without
-	// any platform-specific window API.  open() is called on the UI thread
-	// (from PureDreamsWidget constructor) so glfwCreateWindow is safe here.
-	glfwWindowHint(GLFW_VISIBLE,                GLFW_FALSE);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR,  3);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR,  3);
-	glfwWindowHint(GLFW_OPENGL_PROFILE,         GLFW_OPENGL_CORE_PROFILE);
-	GLFWwindow* offscreen = glfwCreateWindow(pixelW, pixelH, "projectM", nullptr, nullptr);
-	glfwDefaultWindowHints();   // restore defaults so Rack's own windows are unaffected
+    // Create a hidden GLFW window — this is our offscreen GL context.
+    // open() is called on the UI/main thread, which is the only thread
+    // allowed to call glfwCreateWindow.
+    glfwWindowHint(GLFW_VISIBLE,               GLFW_FALSE);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE,        GLFW_OPENGL_CORE_PROFILE);
+#ifdef __APPLE__
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
+#endif
+    GLFWwindow* offscreen = glfwCreateWindow(pixelW, pixelH, "projectM", nullptr, nullptr);
+    glfwDefaultWindowHints();   // restore Rack's defaults
 
-	win = (void*)offscreen;
+    win = (void*)offscreen;
 
-	{
-		std::lock_guard<std::mutex> lock(readyMutex);
-		viewReady = true;
-	}
-	readyCv.notify_one();
-	running = true;
-	renderThread = std::thread([this]() { loop(); });
+    {
+        std::lock_guard<std::mutex> lock(readyMutex);
+        viewReady = true;
+    }
+    readyCv.notify_one();
+    running      = true;
+    renderThread = std::thread([this]() { loop(); });
 }
+
+// ── close ────────────────────────────────────────────────────────────────────
 
 void PDWindow::close() {
-	closing  = true;
-	wantOpen = false;
-	running  = false;
-	{
-		std::lock_guard<std::mutex> lock(readyMutex);
-		viewReady = true;
-	}
-	readyCv.notify_all();
-	if (renderThread.joinable()) renderThread.join();
+    closing  = true;
+    wantOpen = false;
+    running  = false;
+    {
+        std::lock_guard<std::mutex> lock(readyMutex);
+        viewReady = true;
+    }
+    readyCv.notify_all();
+    if (renderThread.joinable()) renderThread.join();
 
-	// glfwDestroyWindow must be called from the main thread.
-	// close() is called from ~PureDreamsWidget() which runs on the UI thread.
-	if (win) {
-		glfwDestroyWindow((GLFWwindow*)win);
-		win = nullptr;
-	}
+    // Must be called from the main thread — satisfied because close() is
+    // called from ~PureDreamsWidget() which runs on the UI thread.
+    if (win) {
+        glfwDestroyWindow((GLFWwindow*)win);
+        win = nullptr;
+    }
 }
 
+// ── loop (render thread) ─────────────────────────────────────────────────────
+
 void PDWindow::loop() {
-	{
-		std::unique_lock<std::mutex> lock(readyMutex);
-		readyCv.wait(lock, [this]{ return viewReady; });
-	}
-	if (!running) return;
+    {
+        std::unique_lock<std::mutex> lock(readyMutex);
+        readyCv.wait(lock, [this] { return viewReady; });
+    }
+    if (!running) return;
 
-	GLFWwindow* offscreen = (GLFWwindow*)win;
-	glfwMakeContextCurrent(offscreen);
+    GLFWwindow* offscreen = (GLFWwindow*)win;
+    glfwMakeContextCurrent(offscreen);
 
-	projectM::Settings s;
-	s.windowWidth    = pixelW;
-	s.windowHeight   = pixelH;
-	s.presetURL      = DEFAULT_PRESET_DIR;
-	s.shuffleEnabled = false;
-	s.presetDuration = 86400;
-	s.fps            = 60;
-	s.meshX          = 32;
-	s.meshY          = 24;
-	projectM* pm     = new projectM(s);
-	pm->setPresetLock(true);
+    // Create projectM instance — use GLFW's GL loader so projectM can
+    // resolve all OpenGL function pointers for this context.
+    projectm_handle pm = projectm_create_with_opengl_load_proc(
+        (projectm_load_proc)glfwGetProcAddress, nullptr);
+    if (!pm) {
+        running = false;
+        return;
+    }
 
-	while (running) {
-		if (requestNext.exchange(false)) {
-			pm->setPresetLock(false);
-			pm->selectNext(true);
-			pm->setPresetLock(true);
-		}
-		if (requestPrev.exchange(false)) {
-			pm->setPresetLock(false);
-			pm->selectPrevious(true);
-			pm->setPresetLock(true);
-		}
-		int preset = requestPreset.exchange(-1);
-		if (preset >= 0) {
-			pm->setPresetLock(false);
-			pm->selectPreset((unsigned)preset, true);
-			pm->setPresetLock(true);
-		}
+    projectm_set_window_size(pm, (size_t)pixelW, (size_t)pixelH);
+    projectm_set_mesh_size(pm, 32, 24);
+    projectm_set_fps(pm, 60);
+    projectm_set_preset_duration(pm, 86400.0);  // never auto-switch
+    projectm_set_preset_locked(pm, true);
 
-		{
-			std::lock_guard<std::mutex> lock(pcmMutex);
-			if (pcmReady) {
-				// Ubuntu's libprojectm-dev exposes addPCMfloat (not addPCMfloat_2ch)
-			// Pass the full interleaved stereo buffer as PCM_SIZE*2 mono samples
-			pm->pcm()->addPCMfloat(pcmBuf, PCM_SIZE * 2);
-				pcmReady = false;
-			}
-		}
+    // Scan preset directory and load the first preset
+    std::vector<std::string> presetPaths = scan_presets(DEFAULT_PRESET_DIR);
+    int presetIdx = 0;
+    if (!presetPaths.empty()) {
+        projectm_load_preset_file(pm, presetPaths[0].c_str(), false);
+        std::lock_guard<std::mutex> nl(nameMutex);
+        currentPresetName  = presetPaths[0];
+        currentPresetIndex = 0;
+    }
 
-		pm->renderFrame();
+    while (running) {
 
-		unsigned int idx = 0;
-		if (pm->selectedPresetIndex(idx)) {
-			currentPresetIndex = (int)idx;
-			std::string name   = pm->getPresetName(idx);
-			std::lock_guard<std::mutex> nl(nameMutex);
-			currentPresetName  = name;
-		}
+        // Next / prev / direct index requests
+        if (requestNext.exchange(false) && !presetPaths.empty()) {
+            presetIdx = (presetIdx + 1) % (int)presetPaths.size();
+            projectm_load_preset_file(pm, presetPaths[presetIdx].c_str(), true);
+            currentPresetIndex = presetIdx;
+            std::lock_guard<std::mutex> nl(nameMutex);
+            currentPresetName = presetPaths[presetIdx];
+        }
+        if (requestPrev.exchange(false) && !presetPaths.empty()) {
+            presetIdx = (presetIdx - 1 + (int)presetPaths.size()) % (int)presetPaths.size();
+            projectm_load_preset_file(pm, presetPaths[presetIdx].c_str(), true);
+            currentPresetIndex = presetIdx;
+            std::lock_guard<std::mutex> nl(nameMutex);
+            currentPresetName = presetPaths[presetIdx];
+        }
+        int req = requestPreset.exchange(-1);
+        if (req >= 0 && req < (int)presetPaths.size()) {
+            presetIdx = req;
+            projectm_load_preset_file(pm, presetPaths[presetIdx].c_str(), true);
+            currentPresetIndex = presetIdx;
+            std::lock_guard<std::mutex> nl(nameMutex);
+            currentPresetName = presetPaths[presetIdx];
+        }
 
-		{
-			std::lock_guard<std::mutex> lock(pixelMutex);
-			glReadPixels(0, 0, pixelW, pixelH, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
-			pixelsDirty = true;
-		}
+        // Feed audio
+        {
+            std::lock_guard<std::mutex> lock(pcmMutex);
+            if (pcmReady) {
+                projectm_pcm_add_float(pm, pcmBuf, (unsigned int)PCM_SIZE,
+                                       PROJECTM_STEREO);
+                pcmReady = false;
+            }
+        }
 
-		glfwSwapBuffers(offscreen);
-	}
+        // Render
+        projectm_opengl_render_frame(pm);
 
-	// Match macOS: skip delete to avoid vtable crash in projectM v3 destructor.
-	pm = nullptr;
-	glfwMakeContextCurrent(nullptr);
+        // Read pixels back for NanoVG upload
+        {
+            std::lock_guard<std::mutex> lock(pixelMutex);
+            glReadPixels(0, 0, pixelW, pixelH, GL_RGBA, GL_UNSIGNED_BYTE,
+                         pixels.data());
+            pixelsDirty = true;
+        }
+
+        glfwSwapBuffers(offscreen);
+    }
+
+    // v4 destroy is safe — no destructor crash
+    projectm_destroy(pm);
+    glfwMakeContextCurrent(nullptr);
 }
