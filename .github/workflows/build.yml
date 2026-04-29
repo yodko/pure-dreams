@@ -60,8 +60,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install projectM
-        run: sudo apt-get install -y libprojectm-dev
+      - name: Install dependencies
+        run: sudo apt-get install -y libprojectm-dev libgl-dev
       - name: Static analysis
         run: |
           sudo apt-get install -y cppcheck
