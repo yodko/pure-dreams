@@ -43,6 +43,19 @@ ifdef ARCH_WIN
 		-DCMAKE_INSTALL_PREFIX=. \
 		..
 	cp $(RACK_DIR)/libRack.dll.a dep/ 2>/dev/null || true
+else ifdef ARCH_MAC
+	cd dep/projectm/build && cmake \
+		-DINCLUDE_DIR=$(RACK_DIR)/dep/include \
+		-DBUILD_SHARED_LIBS=OFF \
+		-DENABLE_SDL_UI=OFF \
+		-DENABLE_OPENMP=OFF \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DENABLE_THREADING=OFF \
+		-DENABLE_PLAYLIST=OFF \
+		-DUSE_SYSTEM_PROJECTM_EVAL=OFF \
+		-DCMAKE_PREFIX_PATH=/opt/homebrew \
+		-DCMAKE_INSTALL_PREFIX=. \
+		..
 else
 	cd dep/projectm/build && cmake \
 		-DINCLUDE_DIR=$(RACK_DIR)/dep/include \
