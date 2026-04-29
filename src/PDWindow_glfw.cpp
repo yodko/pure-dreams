@@ -135,11 +135,16 @@ void PDWindow::loop() {
     projectm_set_preset_duration(pm, 86400.0);  // never auto-switch
     projectm_set_preset_locked(pm, true);
 
-    // Scan preset directory and load the first preset
+    // Scan preset directory and load the first preset.
+    // projectm_load_preset_file() resets the "locked" flag, so we re-lock
+    // after every load to keep auto-switching disabled — without this,
+    // projectM's soft-cut timer fires after a couple of seconds and silently
+    // switches preset, regardless of the duration we set above.
     std::vector<std::string> presetPaths = scan_presets(presetDir.c_str());
     int presetIdx = 0;
     if (!presetPaths.empty()) {
         projectm_load_preset_file(pm, presetPaths[0].c_str(), false);
+        projectm_set_preset_locked(pm, true);
         std::lock_guard<std::mutex> nl(nameMutex);
         currentPresetName  = presetPaths[0];
         currentPresetIndex = 0;
@@ -151,6 +156,7 @@ void PDWindow::loop() {
         if (requestNext.exchange(false) && !presetPaths.empty()) {
             presetIdx = (presetIdx + 1) % (int)presetPaths.size();
             projectm_load_preset_file(pm, presetPaths[presetIdx].c_str(), true);
+            projectm_set_preset_locked(pm, true);
             currentPresetIndex = presetIdx;
             std::lock_guard<std::mutex> nl(nameMutex);
             currentPresetName = presetPaths[presetIdx];
@@ -158,6 +164,7 @@ void PDWindow::loop() {
         if (requestPrev.exchange(false) && !presetPaths.empty()) {
             presetIdx = (presetIdx - 1 + (int)presetPaths.size()) % (int)presetPaths.size();
             projectm_load_preset_file(pm, presetPaths[presetIdx].c_str(), true);
+            projectm_set_preset_locked(pm, true);
             currentPresetIndex = presetIdx;
             std::lock_guard<std::mutex> nl(nameMutex);
             currentPresetName = presetPaths[presetIdx];
@@ -166,6 +173,7 @@ void PDWindow::loop() {
         if (req >= 0 && req < (int)presetPaths.size()) {
             presetIdx = req;
             projectm_load_preset_file(pm, presetPaths[presetIdx].c_str(), true);
+            projectm_set_preset_locked(pm, true);
             currentPresetIndex = presetIdx;
             std::lock_guard<std::mutex> nl(nameMutex);
             currentPresetName = presetPaths[presetIdx];
