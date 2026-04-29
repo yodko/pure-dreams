@@ -36,7 +36,7 @@ jobs:
           curl -fsSL "https://vcvrack.com/downloads/Rack-SDK-${{ env.RACK_SDK_VERSION }}-mac-arm64.zip" -o rack-sdk.zip
           unzip -q rack-sdk.zip
       - name: Build projectM + plugin
-        run: make dep && make RACK_DIR=Rack-SDK
+        run: make dep RACK_DIR=Rack-SDK && make RACK_DIR=Rack-SDK
       - name: Verify binary
         run: |
           test -f plugin.dylib || (echo "plugin.dylib not found" && exit 1)
@@ -74,7 +74,7 @@ jobs:
           curl -fsSL "https://vcvrack.com/downloads/Rack-SDK-${{ env.RACK_SDK_VERSION }}-lin-x64.zip" -o rack-sdk.zip
           unzip -q rack-sdk.zip
       - name: Build projectM + plugin
-        run: make dep && make RACK_DIR=Rack-SDK
+        run: make dep RACK_DIR=Rack-SDK && make RACK_DIR=Rack-SDK
       - name: Verify binary
         run: |
           test -f plugin.so || (echo "plugin.so not found" && exit 1)
@@ -123,7 +123,7 @@ jobs:
           curl -fsSL "https://vcvrack.com/downloads/Rack-SDK-${{ env.RACK_SDK_VERSION }}-win-x64.zip" -o rack-sdk.zip
           unzip -q rack-sdk.zip
       - name: Build projectM + plugin
-        run: make dep && make RACK_DIR=Rack-SDK
+        run: make dep RACK_DIR=Rack-SDK && make RACK_DIR=Rack-SDK
       - name: Verify binary
         run: |
           test -f plugin.dll || (echo "plugin.dll not found" && exit 1)
