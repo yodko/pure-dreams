@@ -119,7 +119,9 @@ void PDWindow::loop() {
 		{
 			std::lock_guard<std::mutex> lock(pcmMutex);
 			if (pcmReady) {
-				pm->pcm()->addPCMfloat_2ch(pcmBuf, PCM_SIZE);
+				// Ubuntu's libprojectm-dev exposes addPCMfloat (not addPCMfloat_2ch)
+			// Pass the full interleaved stereo buffer as PCM_SIZE*2 mono samples
+			pm->pcm()->addPCMfloat(pcmBuf, PCM_SIZE * 2);
 				pcmReady = false;
 			}
 		}
