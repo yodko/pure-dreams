@@ -56,15 +56,17 @@ jobs:
           path: PureDreams/
 
   build-linux:
-    name: Build (Linux x64 — stub)
+    name: Build (Linux x64 — full projectM)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install projectM
+        run: sudo apt-get install -y libprojectm-dev libprojectm3
       - name: Static analysis
         run: |
           sudo apt-get install -y cppcheck
           cppcheck --enable=warning,performance --error-exitcode=1 \
-            src/PureDreams.cpp src/PDWindow_stub.cpp
+            src/PureDreams.cpp src/PDWindow_glfw.cpp
       - name: Download Rack SDK
         run: |
           curl -fsSL "https://vcvrack.com/downloads/Rack-SDK-${{ env.RACK_SDK_VERSION }}-lin-x64.zip" -o rack-sdk.zip
@@ -92,7 +94,7 @@ jobs:
           path: PureDreams/
 
   build-windows:
-    name: Build (Windows x64 — stub)
+    name: Build (Windows x64 — full projectM)
     runs-on: windows-latest
     defaults:
       run:
@@ -107,6 +109,7 @@ jobs:
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-make
             mingw-w64-ucrt-x86_64-binutils
+            mingw-w64-ucrt-x86_64-projectm
             make
             unzip
             curl
