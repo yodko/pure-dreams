@@ -265,6 +265,11 @@ struct PureDreamsWidget : ModuleWidget {
 				restored    = true;
 				auto& ps    = allPresets();
 				auto it     = std::find(ps.begin(), ps.end(), m->savedPresetName);
+				if (it == ps.end()) {
+					it = std::find_if(ps.begin(), ps.end(), [](const std::string& n) {
+						return n.find(DEFAULT_PRESET_HINT) != std::string::npos;
+					});
+				}
 				pdWin->requestPreset = (it != ps.end()) ? (int)std::distance(ps.begin(), it) : 0;
 			}
 

@@ -7,6 +7,11 @@
 #include <string>
 #include <cstdint>
 
+// Substring matched against bundled preset filenames at startup. When no
+// preset is saved in the patch yet, the first preset whose name contains
+// this hint is loaded. Falls back to alphabetical first if absent.
+inline constexpr const char* DEFAULT_PRESET_HINT = "suksma - feign shoulder";
+
 struct PDWindow {
 	std::atomic<bool> wantOpen{true};
 	std::atomic<bool> running{false};
