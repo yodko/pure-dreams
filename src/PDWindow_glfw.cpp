@@ -129,10 +129,9 @@ void PDWindow::loop() {
     GLFWwindow* offscreen = (GLFWwindow*)win;
     glfwMakeContextCurrent(offscreen);
 
-    // Create projectM instance — use GLFW's GL loader so projectM can
-    // resolve all OpenGL function pointers for this context.
-    projectm_handle pm = projectm_create_with_opengl_load_proc(
-        (projectm_load_proc)glfwGetProcAddress, nullptr);
+    // Create projectM instance. The GL context must be current before this
+    // call so projectM can resolve OpenGL function pointers internally.
+    projectm_handle pm = projectm_create();
     if (!pm) {
         running = false;
         return;
