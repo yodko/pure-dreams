@@ -132,7 +132,16 @@ void PDWindow::loop() {
     projectm_set_window_size(pm, (size_t)pixelW, (size_t)pixelH);
     projectm_set_mesh_size(pm, 32, 24);
     projectm_set_fps(pm, 60);
-    projectm_set_preset_duration(pm, 86400.0);  // never auto-switch
+
+    // Disable every auto-switch path projectM v4 has.
+    // set_preset_locked(true) alone should be enough per the docs ("disables
+    // both hard and soft cuts"), but in practice a preset still flips after
+    // ~2s on Windows — likely a hard-cut beat-detect path that the lock
+    // doesn't gate in this build. So we belt-and-suspenders it.
+    projectm_set_preset_duration(pm, 86400.0);
+    projectm_set_soft_cut_duration(pm, 0.0);
+    projectm_set_hard_cut_enabled(pm, false);
+    projectm_set_hard_cut_duration(pm, 86400.0);
     projectm_set_preset_locked(pm, true);
 
     // Scan preset directory and load the first preset.
