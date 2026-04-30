@@ -6,16 +6,19 @@ A VCV Rack 2 module that replaces the background with audio-reactive [MilkDrop](
 
 <table>
 <tr>
-<td><img src="res/module.png" width="90"/></td>
-<td>
+<td valign="top"><img src="res/module.png" width="220"/></td>
+<td valign="top"><br>
 
-**LED grid** — current preset index<br>
-**+** — next preset<br>
-**–** — previous preset<br>
-**right-click** — searchable preset list<br>
-**DIM** — brightness of the visuals<br>
-**SMOOTH** — how tightly the visuals follow the audio<br>
-**IN** — audio input
+<table>
+<tr><td align="right"><b>LED grid</b></td><td>current preset index</td></tr>
+<tr><td align="right"><b>+/–</b></td><td>next / previous preset</td></tr>
+<tr><td align="right"><b>DIM</b></td><td>brightness of the visuals</td></tr>
+<tr><td align="right"><b>SMOOTH</b></td><td>how tightly the visuals follow the audio</td></tr>
+<tr><td align="right"><b>IN</b></td><td>audio input</td></tr>
+</table>
+
+<br>
+<blockquote>Right-click for a searchable list of all presets.</blockquote>
 
 </td>
 </tr>
